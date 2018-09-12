@@ -4,7 +4,10 @@ module Network where
 
 import Network.Socket hiding (send, recv)
 import Network.Socket.ByteString (send, recv, sendAll)
+import Data.ByteString (ByteString)
+import Data.Maybe
 import qualified Data.ByteString.Char8 as C
+import qualified Data.HashMap.Strict as M
 import Control.Concurrent
 import Control.Monad
 import Control.Monad.IO.Class
@@ -22,12 +25,12 @@ blockchain = chain2
 -- p2p_port = 4749
 -- blockchain = chain3
 
--- Peer info: list of (host, port)
-peers = []
+-- Peer info: list of peer (host, port)
+peers = [("127.0.0.1", "4748")]
 
 ------------------------------------------------------------------------------------------
 
--- As a Peer
+-- As a Sender
 -- This part will be an interactive command line
 -- Allow user send command to peers
 
@@ -43,29 +46,37 @@ connect_ (host, port) = do
     print $ msg
     return $ sock
 
--- This is the REPL interface
-peer_handle :: [Socket] -> IO ()
-peer_handle socks = runInputT defaultSettings loopCmd where
+-- The REPL interface
+peer_handle :: MVar [Socket] -> IO ()
+peer_handle mv = runInputT defaultSettings loopCmd where
     loopCmd :: InputT IO ()
     loopCmd = do
         minput <- getInputLine "> "
         case minput of
             Nothing -> return ()
-            Just "quit\r" -> return ()
-            Just "sync\r" -> forM_ socks $ \sock -> do
-                liftIO $ sycnChain sock blockchain
-            Just input -> forM_ socks $ \sock -> do
-                liftIO $ sendReq sock (C.pack input)
+            Just "connect" -> liftIO $ do 
+                pSocks <- mapM connect_ peers
+                tryPutMVar mv pSocks
+                -- print $ (show b) ++ "Peer Sockets are connected" -- To be verify later
+                return ()
+            Just input -> liftIO $ do
+                socks <- tryReadMVar mv
+                sendNetwork (fromJust socks) (C.pack input)
         loopCmd
 
-sendReq :: Socket -> C.ByteString -> IO ()
-sendReq sock raw = do
-    let msg = C.init raw -- this is because of windows ghci put "\r" character to end the string
+sendReq :: Socket -> ByteString -> IO ()
+sendReq sock msg = do
+    -- let msg = C.init raw -- this is because of windows ghci put "\r" character to end the string
     sendAll sock msg
     threadDelay 2048
     res <- recv sock 1024 -- receive blocks msg
     print $ res -- print msg
 
+sendNetwork :: [Socket] -> ByteString -> IO ()
+sendNetwork socks msg = do
+    forM_ socks $ \sock -> sendReq sock msg    
+
+sycnChain :: Socket -> Blockchain -> IO ()    
 sycnChain sock bc = do
     let msg = C.append "sync_chain:" (C.pack $ show bc)
     sendAll sock msg
@@ -75,7 +86,7 @@ sycnChain sock bc = do
 
 ------------------------------------------------------------------------------------------
 
--- As a Node
+-- As a Receiver
 -- Bind socket as specified port and listen
 -- Just like a host/provider/server
 -- This part act as something automation
@@ -85,48 +96,52 @@ main = do
     sock <- socket AF_INET Stream 0    -- create socket
     setSocketOption sock ReuseAddr 1   -- make socket immediately reusable - eases debugging.
     bind sock (SockAddrInet p2p_port iNADDR_ANY)   -- listen on TCP p2p_port as config.
-    ps <- mapM connect_ peers -- connect to peers
+    ps <- newEmptyMVar                             -- init an empty MVar for Sockets
     forkOS $ do
         listen sock 4                              -- set a max of 4 queued connections
-        print $ "Server is listening on port: " ++ (show p2p_port)
+        print $ "Lambda-client is now listening on port: " ++ (show p2p_port)
         threadDelay 2056
         listen_ sock ps                            -- listen on bound socket, keep an eye on peers
     threadDelay 4096
     peer_handle ps
 
-listen_ :: Socket -> [Socket] -> IO ()
+listen_ :: Socket -> MVar [Socket] -> IO ()
 listen_ sock socks = do
     conn <- accept sock     -- accept an incoming connection
+    print $ "A new connection is established. Sock_addr: " ++ (show $ snd conn)
     forkIO $ do
-        sendAll (fst conn) $ C.append "Connection established from port: " (C.pack $ show p2p_port)
-        threadDelay 4000000
-        sendAll (fst conn) $ C.append "sync_chain:" (C.pack $ show blockchain)-- send the ledger
-        conn_handle (fst conn, socks)    -- and handle it
+        sendAll (fst conn) $ C.append "You are connected to: " (C.pack $ show sock)-- send the ledger
+        -- modifyMVarMasked_ socks $ \lst -> return ((fst conn):lst)
+        conn_handle (conn, socks)    -- and handle it
     listen_ sock socks           -- repeat
  
-conn_handle :: (Socket, [Socket]) -> IO ()
-conn_handle (sock, ps) = do
+conn_handle :: ((Socket, SockAddr), MVar [Socket]) -> IO ()
+conn_handle ((sock, sock_addr), socks) = do
     threadDelay 4096
     msg <- recv sock 1024
-    print $ C.append "Received msg: " msg
-    req_handle (sock, ps) msg
+    print $ C.append "Received msg from " $ C.append (C.pack $ show sock_addr) $ C.append ": " msg
+    req_handle ((sock, sock_addr), socks) msg
 
-req_handle :: (Socket, [Socket]) -> C.ByteString -> IO ()    
-req_handle (sock, ps) msg
+req_handle :: ((Socket, SockAddr), MVar [Socket]) -> ByteString -> IO ()    
+req_handle ((sock, sock_addr), ps) msg
+    | msg == "close" = do
+        sendAll sock "Disconnected"
+        close sock
     | msg == "blocks" = do
         sendAll sock $ C.pack $ show chain3
-        conn_handle (sock, ps)
+        conn_handle ((sock, sock_addr), ps)
     | C.takeWhile (/=':') msg == "sync_chain" = do
         let recv_chain = read (C.unpack . C.tail $ C.dropWhile (/=':') msg) :: Blockchain
         up_chain <- replace_chain recv_chain blockchain
         sendAll sock (C.pack $ show up_chain)
-        conn_handle (sock, ps)
+        conn_handle ((sock, sock_addr), ps)
     | C.takeWhile (/=':') msg == "add_block" = do
         mined <- mineBlock genesis_block (C.tail $ C.dropWhile (/=':') msg)
         let up_chain = Node mined blockchain
         print $ C.pack $ show up_chain
-        forM_ ps $ \p -> liftIO $ sycnChain p up_chain
-        conn_handle (sock, ps)
+        socks <- tryReadMVar ps
+        forM_ (fromJust socks) $ \p -> sycnChain p up_chain
+        conn_handle ((sock, sock_addr), ps)
     | otherwise = do
-        sendAll sock "Disconnected"
-        close sock
+        sendAll sock $ "Acknowledged"
+        conn_handle ((sock, sock_addr), ps)

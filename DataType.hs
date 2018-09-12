@@ -65,7 +65,7 @@ replace_chain new_c cur_c
     | (is_valid_chain new_c) /= True = return cur_c
     | otherwise = return new_c
 
--- Build the of to-be-hashed string
+-- Build a to-be-hashed string
 hash_string t b d = C.append (C.pack $ show t) . C.append ":" $ C.append (block_hash b) $ C.append ":" d
 
 mineBlock :: Block -> C.ByteString -> IO Block
