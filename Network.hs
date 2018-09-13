@@ -17,7 +17,7 @@ import DataType
 
 
 -- Node info
--- Pick one of these following, as we will simulate 3 peers
+-- Pick one of these following, as we will simulate 3 nodes
 p2p_port = 4747
 blockchain = chain2
 -- p2p_port = 4748
@@ -31,8 +31,7 @@ peers = [("127.0.0.1", "4748")]
 ------------------------------------------------------------------------------------------
 
 -- As a Sender
--- This part will be an interactive command line
--- Allow user send command to peers
+-- Lambda-client has an interactive command line interface, allow user broadcast data to peers
 
 -- Override the connect function with default settings
 connect_ :: (HostName, ServiceName) -> IO Socket
@@ -87,9 +86,7 @@ sycnChain sock bc = do
 ------------------------------------------------------------------------------------------
 
 -- As a Receiver
--- Bind socket as specified port and listen
--- Just like a host/provider/server
--- This part act as something automation
+-- Bind socket as specified port and listen, send data automatically to requesters
 
 main :: IO ()
 main = do
