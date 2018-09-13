@@ -3,9 +3,12 @@
 
 module DataType where
 
+import Persistence
+
 import Data.Time.Clock.POSIX
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as C
+import Control.Concurrent
 
 import Crypto.Hash
 
@@ -107,3 +110,10 @@ mineBlock lastBlock input nonce = do
 -- Other utils
 toBS :: Show a => a -> ByteString
 toBS = C.pack . show
+
+saveBlock = do
+    db <- openDb
+    push_single db ((block_hash genesis_block), toBS genesis_block)
+    threadDelay 3000000
+    updated <- try 2 $ find db "@" $ block_hash genesis_block
+    return updated
