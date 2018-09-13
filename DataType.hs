@@ -12,6 +12,9 @@ import Crypto.Hash
 -- Account {public_key, private_key}    
 newtype Account = Account Integer
 
+-- Default mine rate: 5min
+mine_rate = 300
+
 -- Transaction
 data Transaction = Transaction {
     from :: Account,
@@ -19,24 +22,25 @@ data Transaction = Transaction {
     amount :: Integer
 }
 
--- Block {timestamp, last_hash, hash, data}
--- Integer should be replace by POSIXTime
+-- Block {timestamp, last_hash, hash, data, nonce}
 data Block = Block {
-    timestamp :: ByteString,
-    last_hash :: ByteString,
+    timestamp  :: ByteString,
+    last_hash  :: ByteString,
     block_hash :: ByteString,
-    block_data :: ByteString }
+    block_data :: ByteString,
+    nonce      :: ByteString,
+    block_diff :: ByteString }
     deriving (Show, Eq, Read)
 
 -- To be replace with a merkle tree    
 data Blockchain = Genesis Block | Node Block Blockchain deriving (Show, Eq, Read)
 
-genesis_block = Block "1536570560" "None" "f1rst_h4sh" "genesis-data"
+genesis_block = Block "1536570561" "None" "f1rst_h4sh" "genesis-data" "0" "000"
 init_chain = Genesis genesis_block
 
 -- test data
-next_block = Block "1536570561" "f1rst_h4sh" "next_h4sh" "next-data"
-other_block = Block "1536570561" "next_h4sh" "other_h4sh" "next-data"
+next_block = Block "1536570561" "f1rst_h4sh" "next_h4sh" "next-data" "0" "000"
+other_block = Block "1536570561" "next_h4sh" "other_h4sh" "next-data" "0" "000"
 chain2 = Node next_block (Genesis genesis_block)
 chain3 = Node other_block (Node next_block (Genesis genesis_block))
 
@@ -65,11 +69,33 @@ replace_chain new_c cur_c
     | (is_valid_chain new_c) /= True = return cur_c
     | otherwise = return new_c
 
--- Build a to-be-hashed string
-hash_string t b d = C.append (C.pack $ show t) . C.append ":" $ C.append (block_hash b) $ C.append ":" d
+-- Hash last block and data
+hash_ :: ByteString -> Block -> ByteString -> ByteString -> Digest SHA256
+hash_ t b d n = hashWith SHA256 $ C.append t                  -- time in miliseconds 
+                                $ C.append ":"                
+                                $ C.append (block_hash b)     -- lash hash (block hash of last block)
+                                $ C.append ":"
+                                $ C.append d                  -- data
+                                $ C.append ":"
+                                $ C.append n              -- nonce
+                                $ C.append ":" (block_diff b)
 
-mineBlock :: Block -> C.ByteString -> IO Block
-mineBlock lastBlock input = do
+adjust_diff :: Block -> Integer -> ByteString                                
+adjust_diff block time
+    | (read (C.unpack $ timestamp block) :: Integer) + mine_rate > time = C.append "0" (block_diff block)
+    | otherwise = C.init (block_diff block)
+
+mineBlock :: Block -> ByteString -> Integer -> IO Block
+mineBlock lastBlock input nonce = do
     now <- getPOSIXTime
-    let to_hash = hash_string now lastBlock input
-    return $ Block (C.pack $ show now) (block_hash lastBlock) (C.pack $ show $ hashWith SHA256 to_hash) input
+    let timestamp = C.take 10 $ toBS now
+    let hashed = toBS $ hash_ timestamp lastBlock input (toBS nonce)
+    let diff = adjust_diff lastBlock (read $ C.unpack timestamp :: Integer)
+    if C.take (C.length diff) hashed == diff
+        then return $ Block (toBS now) (block_hash lastBlock) hashed input (toBS nonce) diff
+        else do
+            mineBlock lastBlock input (nonce + 1)
+
+-- Other utils
+toBS :: Show a => a -> ByteString
+toBS = C.pack . show
