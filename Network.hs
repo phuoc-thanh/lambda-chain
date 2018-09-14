@@ -133,7 +133,7 @@ req_handle ((sock, sock_addr), ps) msg
         sendAll sock (C.pack $ show up_chain)
         conn_handle ((sock, sock_addr), ps)
     | C.takeWhile (/=':') msg == "add_block" = do
-        mined <- mineBlock genesis_block (C.tail $ C.dropWhile (/=':') msg)
+        mined <- mineBlock genesis_block (C.tail $ C.dropWhile (/=':') msg) 0
         let up_chain = Node mined blockchain
         print $ C.pack $ show up_chain
         socks <- tryReadMVar ps

@@ -3,17 +3,22 @@
 
 module DataType where
 
+import Address    
 import Persistence
 
 import Data.Time.Clock.POSIX
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as C
+import Crypto.PubKey.ECC.ECDSA
 import Control.Concurrent
 
 import Crypto.Hash
 
--- Account {public_key, private_key}    
-newtype Account = Account Integer
+data Wallet = Wallet {
+    balance :: ByteString,
+    public_key :: ByteString,
+    key_pair :: KeyPair
+}
 
 -- The mine rate of bitcoin is 10 min (600s).
 -- This is just demonstration, so I set it to only 3s.
@@ -21,8 +26,8 @@ mine_rate = 3
 
 -- Transaction
 data Transaction = Transaction {
-    from :: Account,
-    to :: Account,
+    from :: Wallet,
+    to :: Wallet,
     amount :: Integer
 }
 
@@ -113,7 +118,7 @@ toBS = C.pack . show
 
 saveBlock = do
     db <- openDb
-    push_single db ((block_hash genesis_block), toBS genesis_block)
-    threadDelay 3000000
-    updated <- try 2 $ find db "@" $ block_hash genesis_block
+    -- push_single db ((block_hash genesis_block), toBS genesis_block)
+    -- threadDelay 3000000
+    updated <- try 2 $ find db "@" $ "f1rst_h4sh"
     return updated
