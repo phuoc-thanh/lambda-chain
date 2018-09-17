@@ -33,7 +33,7 @@ data Transaction = Transaction {
 
 -- Block {timestamp, last_hash, hash, data, nonce}
 data Block = Block {
-    timestamp  :: ByteString,
+    timestamp  :: Integer,
     last_hash  :: ByteString,
     block_hash :: ByteString,
     block_data :: ByteString,
@@ -44,12 +44,12 @@ data Block = Block {
 -- To be replace with a merkle tree    
 data Blockchain = Genesis Block | Node Block Blockchain deriving (Show, Eq, Read)
 
-genesis_block = Block "1536570561" "None" "f1rst_h4sh" "genesis-data" "0" "000"
+genesis_block = Block 1536570561000 "None" "f1rst_h4sh" "genesis-data" "0" "000"
 init_chain = Genesis genesis_block
 
 -- test data
-next_block = Block "1536831680" "f1rst_h4sh" "00610a6673b0baed2b47a203b33b24e1135637418ce450b6315d92a04d7e2783" "next-data" "539" "00"
-other_block = Block "1536831936" "f1rst_h4sh" "0ac1720a077bb02b872a4a42f5652cceca419829b74e7d451b55c17c0b3a4f69" "next-data" "15" "0"
+next_block = Block 1536831680000 "f1rst_h4sh" "00610a6673b0baed2b47a203b33b24e1135637418ce450b6315d92a04d7e2783" "next-data" "539" "00"
+other_block = Block 1536831936000 "f1rst_h4sh" "0ac1720a077bb02b872a4a42f5652cceca419829b74e7d451b55c17c0b3a4f69" "next-data" "15" "0"
 chain2 = Node next_block (Genesis genesis_block)
 chain3 = Node other_block (Node next_block (Genesis genesis_block))
 
@@ -61,7 +61,8 @@ add_block n (Node block chain) = do
     let new_chain = Node new_block (Node block chain)
     add_block (n - 1) new_chain
 
--- Recursive validate a chain:
+-- | Recursive validate a chain:
+-- 
 -- 1. Verify the hash value of current block by using hash_ function, if pass: Go to step (2), else return False.
 -- 2. Verify the last_hash of current block with block_hash of older block, if pass: Recursive verify older block
 -- 3. Return False if block doesn't match condition of step (1) and (2)
@@ -70,11 +71,11 @@ is_valid_chain (Genesis b)              -- Case of Genesis
     | b == genesis_block = True
     | otherwise = False
 is_valid_chain (Node b (Genesis g))     -- Case of 1 Node + Genesis
-    | (toBS $ hash_ (timestamp b) g (block_data b) (nonce b)) /= (block_hash b) = False
+    | (showBS $ hash_ (showBS $ timestamp b) g (block_data b) (nonce b)) /= (block_hash b) = False
     | (last_hash b) == (block_hash g) = is_valid_chain (Genesis g)
     | otherwise = False 
 is_valid_chain (Node b (Node n chain))  -- Case of multiple Nodes
-    | (toBS $ hash_ (timestamp b) n (block_data b) (nonce b)) /= (block_hash b) = False
+    | (showBS $ hash_ (showBS $ timestamp b) n (block_data b) (nonce b)) /= (block_hash b) = False
     | (last_hash b) == (block_hash n) = is_valid_chain (Node n chain)
     | otherwise = False 
 
@@ -99,26 +100,29 @@ hash_ t b d n = hashWith SHA256 $ C.append t $ C.append ":"                 -- t
 -- Adjust the difficulty of mining process                                
 adjust_diff :: Block -> Integer -> ByteString                                
 adjust_diff block time
-    | (read (C.unpack $ timestamp block) :: Integer) + mine_rate > time = C.append "0" (block_diff block)
+    | (timestamp block) + mine_rate > time = C.append "0" (block_diff block)
     | otherwise = C.init (block_diff block)
 
 mineBlock :: Block -> ByteString -> Integer -> IO Block
 mineBlock lastBlock input nonce = do
-    now <- getPOSIXTime
-    let timestamp = C.take 10 $ toBS now
-    let hashed    = toBS $ hash_ timestamp lastBlock input (toBS nonce)
-    let diff      = adjust_diff lastBlock (read $ C.unpack timestamp :: Integer)
+    timestamp <- now
+    let hashed    = showBS $ hash_ (showBS timestamp) lastBlock input (showBS nonce)
+    let diff      = adjust_diff lastBlock timestamp
     if C.take (C.length diff) hashed == diff
-        then return $ Block timestamp (block_hash lastBlock) hashed input (toBS nonce) diff
+        then return $ Block timestamp (block_hash lastBlock) hashed input (showBS nonce) diff
         else mineBlock lastBlock input (nonce + 1)
 
--- Other utils
-toBS :: Show a => a -> ByteString
-toBS = C.pack . show
+-- | Show ByteString
+showBS :: Show a => a -> ByteString
+showBS = C.pack . show
+
+-- | Current time in millisecond
+now :: IO Integer
+now = round <$> (*1000) <$> getPOSIXTime
 
 saveBlock = do
     db <- openDb
-    -- push_single db ((block_hash genesis_block), toBS genesis_block)
+    -- push_single db ((block_hash genesis_block), showBS genesis_block)
     -- threadDelay 3000000
     updated <- try 2 $ find db "@" $ "f1rst_h4sh"
     return updated
