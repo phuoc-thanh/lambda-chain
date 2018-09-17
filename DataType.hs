@@ -14,22 +14,9 @@ import Control.Concurrent
 
 import Crypto.Hash
 
-data Wallet = Wallet {
-    balance :: ByteString,
-    public_key :: ByteString,
-    key_pair :: KeyPair
-}
-
 -- The mine rate of bitcoin is 10 min (600s).
 -- This is just demonstration, so I set it to only 3s.
 mine_rate = 3
-
--- Transaction
-data Transaction = Transaction {
-    from :: Wallet,
-    to :: Wallet,
-    amount :: Integer
-}
 
 -- Block {timestamp, last_hash, hash, data, nonce}
 data Block = Block {

@@ -40,3 +40,15 @@ hexPubKey_ :: KeyPair -> ByteString
 hexPubKey_ k = append (trans y) $ encode (i2osp x) where
     Point x y = public_q $ toPublicKey k
     trans n = if mod n 2 == 0 then "02" else "03"
+
+data Address = Address {
+    keyPair :: KeyPair,
+    pubKey  :: ByteString,
+    balance :: Integer
+} deriving (Eq, Show, Read)
+
+regAddress :: IO Address
+regAddress = do
+    keys <- regKeys
+    let pubKey = hexPubKey_ keys
+    return $ Address keys pubKey 50
