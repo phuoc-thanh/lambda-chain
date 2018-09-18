@@ -3,16 +3,17 @@
 module Address where
 
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as C8
 import Cryptography
 
 data Address = Address {
     keyPair :: KeyPair,
-    pubKey  :: ByteString,
+    hexAddr  :: ByteString,
     balance :: Integer
 } deriving (Eq, Show, Read)
 
 new_addr :: IO Address
 new_addr = do
     keys <- regKeys
-    let pubKey = hexPubKey_ $ fst keys
-    return $ Address keys pubKey 50
+    let hexAddr = hexPubKey_ $ fst keys
+    return $ Address keys hexAddr 50

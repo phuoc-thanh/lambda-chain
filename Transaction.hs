@@ -12,8 +12,8 @@ import Data.Maybe
 
 data Transaction = Transaction {
     header :: TransactionHeader,
-    from :: PublicKey,
-    to :: PublicKey,
+    from :: ByteString,
+    to :: ByteString,
     amount :: Integer
     -- input :: ByteString,
     -- outputs :: [(ByteString, Integer)]
@@ -25,21 +25,26 @@ data TransactionHeader = TransactionHeader{
     signature :: Signature
 } deriving (Eq, Show, Read)
 
-transfer :: Address -> PublicKey -> Integer -> IO (Maybe Transaction)
-transfer sender recvKey amount
+transfer :: Address -> ByteString -> Integer -> IO (Maybe Transaction)
+transfer sender recvAddr amount
     | amount > (balance sender) = return Nothing
     | otherwise = do
         timestamp <- now
-        let data_ = hash . append (pubKey sender) . append recvKey $ showBS amount
-        sign_    <- sign (snd $ keyPair sender) (showBS data_)
+        let data_ = hash . append (hexAddr sender) . append recvAddr $ showBS amount
+        sign_    <- sign (snd $ keyPair sender) data_
         let head_ = TransactionHeader 0 timestamp sign_
-        return . Just $ Transaction head_ (pubKey sender) recvKey amount
+        return . Just $ Transaction head_ (hexAddr sender) recvAddr amount
 
+-- | Verify a Signed Trasaction from given signature and data        
 verify_txn :: Transaction -> Bool
-verify_txn txn = verify (from txn) (signature $ header txn) data_
-    where data_ = hash . append (from txn) . append (to txn) $ showBS amount
+verify_txn txn = verify (fromJust . getPubKey_ $ from txn) (signature $ header txn) (hash_txn txn)
+
+-- | Hash transaction data with SHA256
+hash_txn :: Transaction -> Digest SHA256
+hash_txn txn = hash . append (from txn) $ append (to txn) (showBS $ amount txn)    
 
 test = do
     sender <- new_addr
     receiver <- new_addr
-    transfer sender (pubKey receiver) 49
+    txn <- transfer sender (hexAddr receiver) 49
+    return $ verify_txn $ fromJust txn
