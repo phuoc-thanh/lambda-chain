@@ -2,26 +2,18 @@
 
 module Transaction where
 
-import Address
+import Cryptography
 import DataType
+import Address
 
-import Crypto.PubKey.ECC.ECDSA
-import Crypto.PubKey.ECC.Types
-import Crypto.PubKey.ECC.Generate
-import Crypto.Random.Types
-import Crypto.PubKey.ECC.Prim
-import Crypto.Hash
 import Data.ByteString (ByteString)
-import Data.ByteString.Base16
 import Data.ByteString.Char8
-import qualified Data.Serialize as S
-import Data.Monoid
-
+import Data.Maybe
 
 data Transaction = Transaction {
     header :: TransactionHeader,
-    from :: ByteString,
-    to :: ByteString,
+    from :: PublicKey,
+    to :: PublicKey,
     amount :: Integer
     -- input :: ByteString,
     -- outputs :: [(ByteString, Integer)]
@@ -30,20 +22,24 @@ data Transaction = Transaction {
 data TransactionHeader = TransactionHeader{
     txn_index :: Integer,
     timestamp :: Integer,
-    signature :: ByteString
+    signature :: Signature
 } deriving (Eq, Show, Read)
 
-transfer :: Address -> ByteString -> Integer -> IO Transaction
+transfer :: Address -> PublicKey -> Integer -> IO (Maybe Transaction)
 transfer sender recvKey amount
-    | amount > (balance sender) = do
-        return $ Transaction (TransactionHeader 0 0 "Invalid") (pubKey sender) recvKey amount
+    | amount > (balance sender) = return Nothing
     | otherwise = do
         timestamp <- now
-        -- let signed = sign (toPrivateKey $ keyPair sender) SHA256 (S.encode "datax")
-        let head = TransactionHeader 0 timestamp (showBS "data")
-        return $ Transaction head (pubKey sender) recvKey amount
+        let data_ = hash . append (pubKey sender) . append recvKey $ showBS amount
+        sign_    <- sign (snd $ keyPair sender) (showBS data_)
+        let head_ = TransactionHeader 0 timestamp sign_
+        return . Just $ Transaction head_ (pubKey sender) recvKey amount
+
+verify_txn :: Transaction -> Bool
+verify_txn txn = verify (from txn) (signature $ header txn) data_
+    where data_ = hash . append (from txn) . append (to txn) $ showBS amount
 
 test = do
-    sender <- regAddress
-    receiver <- regAddress
-    return $ transfer sender (pubKey receiver) 51
+    sender <- new_addr
+    receiver <- new_addr
+    transfer sender (pubKey receiver) 49
