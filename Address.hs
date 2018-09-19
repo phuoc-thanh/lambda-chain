@@ -4,7 +4,7 @@ module Address where
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as C8
-import Cryptography
+import Crypto
 
 data Address = Address {
     keyPair :: KeyPair,

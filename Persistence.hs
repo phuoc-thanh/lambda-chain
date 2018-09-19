@@ -18,6 +18,11 @@ import qualified System.IO (FilePath)
 import Control.Monad
 import Control.Concurrent
 
+
+-- -----------------------------------------------------------------------------
+-- | Lambda Database: a usecase of lmdb
+-- -----------------------------------------------------------------------------
+
 lmdbEnvF :: [MDB_EnvFlag]
 lmdbEnvF = [MDB_NOLOCK, MDB_WRITEMAP]
 
@@ -48,7 +53,7 @@ initDb fp = do
     txn <- mdb_txn_begin env Nothing False
     data_dbi <- mdb_dbi_open' txn (Just "@") [MDB_CREATE]
     ref_dbi  <- mdb_dbi_open' txn (Just "#") [MDB_CREATE]
-    put txn ref_dbi ("blocks", "1")
+    -- put txn ref_dbi ("blocks", "1")
     mdb_txn_commit txn
 
 -- Truncate a Database
@@ -59,14 +64,45 @@ clearDb db = do
     mdb_clear txn dbi
     mdb_txn_commit txn
 
--------------------------------- Basic Commands --------------------------------
+-- | Start lmdb with lambda writer
+start_lmdb :: IO Lambdadb
+start_lmdb = do
+    env <- initEnv "data.mdb"
+    dbSignal <- newMVar ()
+    dbCommit <- newMVar mempty
+    let db = Lambdadb {
+        db_env = env,
+        db_signal = dbSignal,
+        db_commit = dbCommit
+    }
+    mdb_env_info env >>= print
+    forkIO (lambdaWriter db)
+    threadDelay 2000000
+    return db
 
--- get the reference value
+-- | Open lmdb without writer, to get a transaction on specified db table
+open_lmdb :: String -> IO (MDB_txn, MDB_dbi')  
+open_lmdb dbi = do
+    env <- initEnv "data.mdb"
+    txn <- mdb_txn_begin env Nothing False
+    ref <- mdb_dbi_open' txn (Just dbi) []
+    return (txn, ref)
+
+reset_lmdb = do
+    clearDb "@"
+    clearDb "#"
+    initDb "data.mdb"
+
+-- -----------------------------------------------------------------------------
+-- | Basic Get/Put Commands
+-- -----------------------------------------------------------------------------
+
+-- Get the reference value
 get_ref txn dbi k = do
     val <- withBS_as_val k $ get txn dbi
     return $ fromJust val
     
-
+-- | Find value in specified db
 find :: Lambdadb -> String -> ByteString -> IO (Maybe ByteString)
 find db t k = do -- t: db name, # or @
     txn <- mdb_txn_begin (db_env db) Nothing True
@@ -75,24 +111,28 @@ find db t k = do -- t: db name, # or @
     mdb_txn_commit txn
     return v
 
--- try N times
+-- | Try N times to find a value
 try 0 f = return "Nothing"
 try n f = do
     threadDelay 32768
     val <- f 
     if (val == Nothing) then try (n - 1) f else return (fromJust val)
 
+-- | Push a single record to db    
 push_single :: Lambdadb -> (ByteString, ByteString) -> IO ()
 push_single db (k, v) = do
     modifyMVarMasked_ (db_commit db) $ \lst -> return (M.insert k v lst)
     dbSignal db
 
+-- | Push a commit (set of record) to db    
 push_commit :: Lambdadb -> Commit -> IO ()
 push_commit db cm = do
     modifyMVarMasked_ (db_commit db) $ \lst -> return (M.union cm lst)
     dbSignal db
 
--------------------------------- Transaction Commands --------------------------------
+-- -----------------------------------------------------------------------------
+-- | Transaction Commands
+-- -----------------------------------------------------------------------------
 
 get :: MDB_txn -> MDB_dbi' -> MDB_val -> IO (Maybe ByteString)
 get txn dbi k = do
@@ -115,26 +155,26 @@ update txn dbi (k, v) = do
             mdb_put' writeflags txn dbi key value
                    
 
--------------------------------- Helpers Section --------------------------------
+commit_txn txn = mdb_txn_commit txn            
 
--- | helpers to cast between bytestring and lmdb object
---
+-- -----------------------------------------------------------------------------
+-- | Helpers: cast between bytestring and lmdb object
+-- -----------------------------------------------------------------------------
 
--- using bytestring as lmdb val
+-- | Using bytestring as lmdb val
 withBS_as_val :: ByteString -> (MDB_val -> IO a) -> IO a
 withBS_as_val s action = withBS s $ \p len -> 
     action (MDB_val (fromIntegral len) p)
 
--- - Foreign Pointer: withForeignPtr
--- | The type ForeignPtr represents references to objects that are maintained in a foreign language, i.e.,
+-- | Foreign Pointer: withForeignPtr
+-- The type ForeignPtr represents references to objects that are maintained in a foreign language, i.e.,
 -- that are not part of the data structures usually managed by the Haskell storage manager. 
-
 withBS :: ByteString -> (Ptr Word8 -> Int -> IO a) -> IO a
 withBS (BS.PS fp off len) action =
     withForeignPtr fp $ \p ->
         action (p `plusPtr` off) len
 
--- Val to Bytestring        
+-- | Val to Bytestring        
 mdbVal_to_BS :: MDB_val -> IO BS.ByteString
 mdbVal_to_BS (MDB_val mv_size mv_data)
     | (mv_size == 0) = return BS.empty
@@ -142,8 +182,9 @@ mdbVal_to_BS (MDB_val mv_size mv_data)
         where len = fromIntegral mv_size
     
         
--------------------------------- Writer Setup --------------------------------
-
+-- -----------------------------------------------------------------------------
+-- | LambdaDb Writer
+-- -----------------------------------------------------------------------------
 dbSignal :: Lambdadb -> IO ()
 dbSignal db = tryPutMVar (db_signal db) () >> return () --A non-blocking version of putMVar
 
@@ -174,24 +215,3 @@ lambdaWriter db = do
     -- Thread Delay - Optional
     -- threadDelay 480000
     lambdaWriter db
-
--------------------------------- Test Section --------------------------------
-
-openDb = do
-    env <- initEnv "data.mdb"
-    dbSignal <- newMVar ()
-    dbCommit <- newMVar mempty
-    let db = Lambdadb {
-        db_env = env,
-        db_signal = dbSignal,
-        db_commit = dbCommit
-    }
-    mdb_env_info env >>= print
-    forkIO (lambdaWriter db)
-    threadDelay 2000000
-    return db
-
-resetDb = do
-    clearDb "@"
-    clearDb "#"
-    initDb "data.mdb"

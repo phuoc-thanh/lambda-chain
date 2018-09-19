@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Cryptography (
+module Crypto (
     DSA.PublicKey,
     DSA.PrivateKey,
     DSA.Signature,
-    Cryptography.verify,
-    Cryptography.hash,
-    Cryptography.sign,
+    Crypto.verify,
+    Crypto.hash,
+    Crypto.sign,
     Digest,
     SHA256,
     KeyPair(..),
@@ -78,7 +78,7 @@ y_from_x _ x = 0
 -- | Modular Square Root, hard to explain..
 sqrt_mod x = sqrtModP' (mod y2 p) p where y2 = x^3 + 7
 
--- | Checking (Point x y) is valid with secp256k1 Curve or not 
+-- | Check if (Point x y) is valid with secp256k1 Curve or not 
 isPointValid_ x y = isPointValid secp256k1 (Point x y)
 
 -- | Hash raw data with SHA256 hash function

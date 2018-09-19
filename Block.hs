@@ -1,7 +1,7 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module DataType where
+module Block where
 
 import Address    
 import Persistence
@@ -107,9 +107,9 @@ showBS = C.pack . show
 now :: IO Integer
 now = round <$> (*1000) <$> getPOSIXTime
 
-saveBlock = do
-    db <- openDb
-    -- push_single db ((block_hash genesis_block), showBS genesis_block)
-    -- threadDelay 3000000
-    updated <- try 2 $ find db "@" $ "f1rst_h4sh"
-    return updated
+-- saveBlock = do
+--     db <- openDb
+--     -- push_single db ((block_hash genesis_block), showBS genesis_block)
+--     -- threadDelay 3000000
+--     updated <- try 2 $ find db "@" $ "f1rst_h4sh"
+--     return updated

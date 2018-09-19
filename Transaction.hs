@@ -2,12 +2,13 @@
 
 module Transaction where
 
-import Cryptography
-import DataType
+import Crypto
+import Block
 import Address
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8
+import Data.List
 import Data.Maybe
 
 data Transaction = Transaction {
@@ -19,11 +20,13 @@ data Transaction = Transaction {
     -- outputs :: [(ByteString, Integer)]
 } deriving (Eq, Show, Read)
 
-data TransactionHeader = TransactionHeader{
+data TransactionHeader = TransactionHeader {
     txn_index :: Integer,
     timestamp :: Integer,
     signature :: Signature
 } deriving (Eq, Show, Read)
+
+type TransactionPool = [Transaction]
 
 transfer :: Address -> ByteString -> Integer -> IO (Maybe Transaction)
 transfer sender recvAddr amount
@@ -34,6 +37,12 @@ transfer sender recvAddr amount
         sign_    <- sign (snd $ keyPair sender) data_
         let head_ = TransactionHeader 0 timestamp sign_
         return . Just $ Transaction head_ (hexAddr sender) recvAddr amount
+
+expand_pool :: Transaction -> TransactionPool -> TransactionPool
+expand_pool txn pool = txn : pool
+
+reduce_pool :: [Transaction] -> TransactionPool -> TransactionPool
+reduce_pool txns pool = pool \\ txns
 
 -- | Verify a Signed Trasaction from given signature and data        
 verify_txn :: Transaction -> Bool
