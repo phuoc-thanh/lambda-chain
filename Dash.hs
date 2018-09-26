@@ -16,20 +16,10 @@ import Transaction
 import Block
 
 
-blockchain = chain2
+-- -----------------------------------------------------------------------------
+-- Dash is a Command Line Interface that helps interact with Lambda-Chain
 
-txn_pool :: TransactionPool
-txn_pool = []
-
--- Peer info: list of peer (host, port)
-peers = [("127.0.0.1", "4748")]
-
-------------------------------------------------------------------------------------------
-
--- As a Sender
--- Lambda-client has an interactive command line interface, allow user broadcast data to peers
-
--- The REPL interface
+-- | The REPL interface
 peer_handle :: MVar [Socket] -> IO ()
 peer_handle mv = runInputT defaultSettings loopCmd where
     loopCmd :: InputT IO ()
@@ -49,7 +39,8 @@ peer_handle mv = runInputT defaultSettings loopCmd where
 
 sendReq :: Socket -> ByteString -> IO ()
 sendReq sock msg = do
-    -- let msg = C.init raw -- this is because of windows ghci put "\r" character to end the string
+    -- this is because of windows 7 ghci put "\r" character to end the string
+    -- let msg = C.init raw
     sendAll sock msg
     threadDelay 2048
     res <- recv sock 1024 -- receive blocks msg
@@ -67,11 +58,9 @@ sycnChain sock bc = do
     res <- recv sock 1024 -- receive blocks msg
     print $ res -- print msg
 
-------------------------------------------------------------------------------------------
+-- -----------------------------------------------------------------------------
 
--- As a Receiver
--- Bind socket as specified port and listen, send data automatically to requesters
- 
+-- | Handle Connections
 conn_handle :: ((Socket, SockAddr), MVar [Socket]) -> IO ()
 conn_handle ((sock, sock_addr), socks) = do
     threadDelay 4096

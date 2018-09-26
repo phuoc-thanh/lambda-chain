@@ -47,19 +47,19 @@ initNode = do
 
 -- | Go live a node, with empty chain, peers and txn_pool
 go_live p2p_port = do
-    db <- start_lmdb
-    sock <- listenOn p2p_port
+    db         <- start_lmdb
+    sock       <- listenOn p2p_port
     blockchain <- newEmptyMVar
-    txn_pool <- newMVar mempty
-    peers <- newMVar mempty
-    let state = NodeState {
+    txn_pool   <- newMVar mempty
+    peers      <- newMVar mempty
+    -- Initiate State of Node
+    let state  = NodeState {
         _chain = blockchain,
-        _pool = txn_pool,
+        _pool  = txn_pool,
         _peers = peers
     }
     forkIO $ do
         listen_ sock (_peers state)
-    print "ready"
 
 -- | Return the hex-version PublicKey of Node    
 getPublicAddress db = do

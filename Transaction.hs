@@ -13,11 +13,9 @@ import Data.Maybe
 
 data Transaction = Transaction {
     header :: TransactionHeader,
-    from :: ByteString,
-    to :: ByteString,
+    from   :: ByteString,
+    to     :: ByteString,
     amount :: Integer
-    -- input :: ByteString,
-    -- outputs :: [(ByteString, Integer)]
 } deriving (Eq, Show, Read)
 
 data TransactionHeader = TransactionHeader {
@@ -31,12 +29,12 @@ type TransactionPool = [Transaction]
 transfer :: Address -> ByteString -> Integer -> IO (Maybe Transaction)
 transfer sender recvAddr amount
     | amount > (balance sender) = return Nothing
-    | otherwise = do
+    | otherwise   = do
         timestamp <- now
         let data_ = hash . append (hexAddr sender) . append recvAddr $ showBS amount
-        sign_    <- sign (snd $ keyPair sender) data_
+        sign_     <- sign (snd $ keyPair sender) data_
         let head_ = TransactionHeader 0 timestamp sign_
-        return . Just $ Transaction head_ (hexAddr sender) recvAddr amount
+        return    . Just $ Transaction head_ (hexAddr sender) recvAddr amount
 
 expand_pool :: Transaction -> TransactionPool -> TransactionPool
 expand_pool txn pool = txn : pool
@@ -51,9 +49,3 @@ verify_txn txn = verify (fromJust . getPubKey_ $ from txn) (signature $ header t
 -- | Hash transaction data with SHA256
 hash_txn :: Transaction -> Digest SHA256
 hash_txn txn = hash . append (from txn) $ append (to txn) (showBS $ amount txn)    
-
-test = do
-    sender <- new_addr
-    receiver <- new_addr
-    txn <- transfer sender (hexAddr receiver) 49
-    return $ verify_txn $ fromJust txn
