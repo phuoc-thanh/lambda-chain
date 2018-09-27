@@ -52,7 +52,7 @@ go_live p2p_port = do
     blockchain <- newEmptyMVar
     txn_pool   <- newMVar mempty
     peers      <- newMVar mempty
-    -- Initiate State of Node
+    -- Initiate Node State
     let state  = NodeState {
         _chain = blockchain,
         _pool  = txn_pool,
@@ -60,6 +60,7 @@ go_live p2p_port = do
     }
     forkIO $ do
         listen_ sock (_peers state)
+    return state    
 
 -- | Return the hex-version PublicKey of Node    
 getPublicAddress db = do

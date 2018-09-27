@@ -9,7 +9,9 @@ module Network.Connection (
     accept,
     listenOn,
     listen_,
-    connect_
+    connect_,
+    sendReq,
+    sendNetwork
 ) where
 
 import Network.Socket hiding (send, recv)
@@ -17,6 +19,7 @@ import Network.Socket.ByteString (send, recv, sendAll)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 (append, pack)
 import Control.Concurrent
+import Control.Monad (forM_)
 
 
 -- | Connect with default settings of Network.Socket
@@ -42,12 +45,27 @@ listenOn p2p_port = do
     threadDelay 4096
     return sock
 
+-- | Listen n Accept incoming connections
 listen_ :: Socket -> MVar [Socket] -> IO ()
 listen_ sock socks = do
-    conn <- accept sock     -- accept an incoming connection
-    print $ "A new connection is established. Sock_addr: " ++ (show $ snd conn)
-    forkIO $ do
-        sendAll (fst conn) $ append "You are connected to: " (pack $ show sock)
-        modifyMVarMasked_ socks $ \lst -> return ((fst conn):lst)
-        -- conn_handle (conn, socks)    -- and handle it
-    listen_ sock socks           -- repeat
+    conn   <- accept sock
+    print  $ "A new connection is established. Sock_addr: " ++ (show $ snd conn)
+    -- send welcome msg, then modify list of peers (MVar peers)
+    sendAll (fst conn) $ append "You are connected to: " (pack $ show sock)
+    modifyMVarMasked_ socks $ \lst -> return $ (fst conn):lst
+    listen_ sock socks
+
+-- | Send a message on specified socket, then try receive 1024 bytes of response
+sendReq :: Socket -> ByteString -> IO ()
+sendReq sock msg = do
+    -- this is because of windows 7 ghci put "\r" character to end the string
+    -- let msg = C.init raw
+    sendAll sock msg
+    threadDelay 2048
+    res <- recv sock 1024
+    print res
+
+-- | Send a message to whole network (peers)    
+sendNetwork :: [Socket] -> ByteString -> IO ()
+sendNetwork socks msg = do
+    forM_ socks $ \sock -> sendReq sock msg       
