@@ -68,4 +68,4 @@ sendReq sock msg = do
 -- | Send a message to whole network (peers)    
 sendNetwork :: [Socket] -> ByteString -> IO ()
 sendNetwork socks msg = do
-    forM_ socks $ \sock -> sendReq sock msg       
+    forM_ socks $ \sock -> sendAll sock msg       

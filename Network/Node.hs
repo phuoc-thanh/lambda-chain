@@ -5,11 +5,11 @@ module Network.Node where
 import Network.Socket hiding (send, recv)
 import Network.Socket.ByteString (send, recv, sendAll)
 import Control.Concurrent
-import Control.Monad (forM_)
+import Control.Monad (forM_, unless)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8
 import Data.Maybe
-import Prelude hiding (takeWhile, dropWhile, tail)
+import Prelude hiding (takeWhile, dropWhile, tail, null)
 
 import Address
 import Block
@@ -78,30 +78,33 @@ conn_handle st = do
     threadDelay 2000000
     conn <- tryReadMVar (_peers st)
     forM_ (fromJust conn) $ \s -> req_handle s st
+    conn_handle st
 
 -- | Hanle incoming requests    
 req_handle :: Socket -> NodeState -> IO ()    
 req_handle sock st = do
     msg <- recv sock 1024
-    case (takeWhile (/=':') msg) of
-        "close"        -> do
-            sendAll sock "Disconnected"
-            close sock
-        "blocks"       -> do
-            chain <- tryReadMVar (_chain st)
-            sendAll sock (pack $ show chain)            
-        "transactions" -> do
-            txns  <- tryReadMVar (_pool st)
-            sendAll sock (pack $ show txns)
-        "sync_chain"   -> do
-            let recv_chain = read (unpack . tail $ dropWhile (/=':') msg) :: Blockchain
-            chain <- tryReadMVar (_chain st)
-            up_chain <- replace_chain recv_chain $ fromJust chain
-            sendAll sock $ pack $ show up_chain
-        "add_block"    -> do
-            mined <- mineBlock genesis_block (tail $ dropWhile (/=':') msg) 0
-            chain <- tryReadMVar (_chain st)
-            let up_chain = Node mined (fromJust chain)
-            conn  <- tryReadMVar (_peers st)
-            forM_ (fromJust conn) $ \p -> sycn_chain p up_chain           
-        m -> sendAll sock "Acknowledged"
+    unless (null msg) $ do
+        case (takeWhile (/=':') msg) of
+            "close"        -> do
+                sendAll sock "Disconnected"
+                close sock
+            "blocks"       -> do
+                chain <- tryReadMVar (_chain st)
+                sendAll sock (pack $ show chain)            
+            "transactions" -> do
+                txns  <- tryReadMVar (_pool st)
+                sendAll sock (pack $ show txns)
+            "sync_chain"   -> do
+                let recv_chain = read (unpack . tail $ dropWhile (/=':') msg) :: Blockchain
+                chain <- tryReadMVar (_chain st)
+                up_chain <- replace_chain recv_chain $ fromJust chain
+                sendAll sock $ pack $ show up_chain
+            "add_block"    -> do
+                mined <- mineBlock genesis_block (tail $ dropWhile (/=':') msg) 0
+                chain <- tryReadMVar (_chain st)
+                let up_chain = Node mined (fromJust chain)
+                conn  <- tryReadMVar (_peers st)
+                forM_ (fromJust conn) $ \p -> sycn_chain p up_chain
+            "Acknowledged" -> return ()  
+            m -> sendAll sock "Acknowledged"
