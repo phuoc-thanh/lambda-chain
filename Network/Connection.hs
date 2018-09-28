@@ -31,8 +31,8 @@ connect_ (host, port) = do
     connect sock (addrAddress serveraddr)
     threadDelay 1024
     msg <- recv sock 256 -- receive welcome msg
-    print $ msg
-    return $ sock
+    print msg
+    return sock
 
 -- | Listen on a bound socket
 listenOn :: PortNumber -> IO Socket

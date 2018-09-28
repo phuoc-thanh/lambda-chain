@@ -2,8 +2,9 @@
 
 module Network.Message where
 
-data Msg = ReqBlocks
-    | AddBlock
-    | ReqTxn
-    | ExpTxn
-    | SyncBlocks     
+import Network.Connection    
+
+-- | Raw, Request , Response
+data Msg = Raw | Req | Res
+
+data Req = Block | Chain | Transaction
