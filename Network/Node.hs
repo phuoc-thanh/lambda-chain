@@ -2,7 +2,7 @@
 
 module Network.Node where
 
-import Network.Socket hiding (send, recv)
+import Network.Socket hiding (send, recv, Raw)
 import Network.Socket.ByteString (send, recv, sendAll)
 import Control.Concurrent
 import Control.Monad (forM_, unless)
@@ -83,28 +83,9 @@ conn_handle st = do
 -- | Hanle incoming requests    
 req_handle :: Socket -> NodeState -> IO ()    
 req_handle sock st = do
-    msg <- recv sock 1024
-    unless (null msg) $ do
-        case (takeWhile (/=':') msg) of
-            "close"        -> do
-                sendAll sock "Disconnected"
-                close sock
-            "blocks"       -> do
-                chain <- tryReadMVar (_chain st)
-                sendAll sock (pack $ show chain)            
-            "transactions" -> do
-                txns  <- tryReadMVar (_pool st)
-                sendAll sock (pack $ show txns)
-            "sync_chain"   -> do
-                let recv_chain = read (unpack . tail $ dropWhile (/=':') msg) :: Blockchain
-                chain <- tryReadMVar (_chain st)
-                up_chain <- replace_chain recv_chain $ fromJust chain
-                sendAll sock $ pack $ show up_chain
-            "add_block"    -> do
-                mined <- mineBlock genesis_block (tail $ dropWhile (/=':') msg) 0
-                chain <- tryReadMVar (_chain st)
-                let up_chain = Node mined (fromJust chain)
-                conn  <- tryReadMVar (_peers st)
-                forM_ (fromJust conn) $ \p -> sycn_chain p up_chain
-            "Acknowledged" -> return ()  
-            m -> sendAll sock "Acknowledged"
+    raw <- recv sock 1024
+    unless (null raw) $ do
+        case (rawToMsg raw) of          
+            TxnReq txn -> modifyMVarMasked_ (_pool st) $ \txns -> return $ txn:txns
+            BlockReq b -> modifyMVarMasked_ (_chain st) $ \lst -> return $ b:lst
+            Raw -> return ()

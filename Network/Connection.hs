@@ -40,7 +40,7 @@ listenOn p2p_port = do
     sock <- socket AF_INET Stream 0                -- create socket
     setSocketOption sock ReuseAddr 1               -- make socket immediately reusable - eases debugging.
     bind sock (SockAddrInet p2p_port iNADDR_ANY)   -- listen on TCP p2p_port as config.
-    listen sock 32                                 -- set a max of 4 queued connections
+    listen sock 32                                 -- set a max of 32 queued connections
     print $ "Lambda-client is now listening on port: " ++ (show p2p_port)
     threadDelay 4096
     return sock

@@ -28,25 +28,17 @@ data Block = Block {
     block_diff :: ByteString }
     deriving (Show, Eq, Read)
 
--- To be replace with a merkle tree    
-data Blockchain = Genesis Block | Node Block Blockchain deriving (Show, Eq, Read)
+-- Chain of Blocks / List of Block_Hash
+type Blockchain = [Block]
 
 genesis_block = Block 1536570561000 "None" "f1rst_h4sh" "genesis-data" "0" "000"
-init_chain = Genesis genesis_block
+init_chain = [genesis_block]
 
 -- test data
 next_block = Block 1536831680000 "f1rst_h4sh" "00610a6673b0baed2b47a203b33b24e1135637418ce450b6315d92a04d7e2783" "next-data" "539" "00"
 other_block = Block 1536831936000 "f1rst_h4sh" "0ac1720a077bb02b872a4a42f5652cceca419829b74e7d451b55c17c0b3a4f69" "next-data" "15" "0"
-chain2 = Node next_block (Genesis genesis_block)
-chain3 = Node other_block (Node next_block (Genesis genesis_block))
-
--- to be remove
-add_block :: Integer -> Blockchain -> IO Blockchain
-add_block 0 (Node block chain) = return (Node block chain)
-add_block n (Node block chain) = do
-    new_block <- mineBlock block "test_data" 0 
-    let new_chain = Node new_block (Node block chain)
-    add_block (n - 1) new_chain
+chain2 = next_block : init_chain
+chain3 = other_block : chain2
 
 -- | Recursive validate a chain:
 -- 
@@ -54,26 +46,18 @@ add_block n (Node block chain) = do
 -- 2. Verify the last_hash of current block with block_hash of older block, if pass: Recursive verify older block
 -- 3. Return False if block doesn't match condition of step (1) and (2)
 is_valid_chain :: Blockchain -> Bool
-is_valid_chain (Genesis b)              -- Case of Genesis
-    | b == genesis_block = True
-    | otherwise = False
-is_valid_chain (Node b (Genesis g))     -- Case of 1 Node + Genesis
-    | (showBS $ hash_ (showBS $ timestamp b) g (block_data b) (nonce b)) /= (block_hash b) = False
-    | (last_hash b) == (block_hash g) = is_valid_chain (Genesis g)
-    | otherwise = False 
-is_valid_chain (Node b (Node n chain))  -- Case of multiple Nodes
-    | (showBS $ hash_ (showBS $ timestamp b) n (block_data b) (nonce b)) /= (block_hash b) = False
-    | (last_hash b) == (block_hash n) = is_valid_chain (Node n chain)
+ -- Case of Genesis
+is_valid_chain (b:[]) = (b == genesis_block)
+is_valid_chain (b:p:chain)  -- Case of multiple Nodes
+    | (showBS $ hash_ (showBS $ timestamp b) p (block_data b) (nonce b)) /= (block_hash b) = False
+    | (last_hash b) == (block_hash p) = is_valid_chain (p:chain)
     | otherwise = False 
 
-chain_length (Genesis b) = 1
-chain_length (Node b (Genesis g)) = 2
-chain_length (Node b (Node n chain)) = 1 + chain_length (Node n chain)
 
 -- Verify and update to new longer chain if the new chain valids
 replace_chain :: Blockchain -> Blockchain -> IO Blockchain
 replace_chain new_c cur_c
-    | (chain_length new_c <= chain_length cur_c) = return cur_c
+    | (length new_c <= length cur_c) = return cur_c
     | (is_valid_chain new_c) /= True = return cur_c
     | otherwise = return new_c
 
