@@ -86,6 +86,6 @@ req_handle sock st = do
     raw <- recv sock 1024
     unless (null raw) $ do
         case (rawToMsg raw) of          
-            TxnReq txn -> modifyMVarMasked_ (_pool st) $ \txns -> return $ txn:txns
+            TxnReq txn -> modifyMVarMasked_ (_pool st) $ \txns -> return $ expand_pool txn txns
             BlockReq b -> modifyMVarMasked_ (_chain st) $ \lst -> return $ b:lst
-            Raw -> return ()
+            Raw -> return ()            

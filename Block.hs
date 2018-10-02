@@ -6,13 +6,13 @@ module Block where
 import Address    
 import Persistence
 
-import Data.Time.Clock.POSIX
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as C
 import Crypto.PubKey.ECC.ECDSA
 import Control.Concurrent
 
 import Crypto.Hash
+import Transaction
 
 -- The mine rate of bitcoin is 10 min (600s).
 -- This is just demonstration, so I set it to only 3s.
@@ -20,13 +20,19 @@ mine_rate = 3
 
 -- Block {timestamp, last_hash, hash, data, nonce}
 data Block = Block {
-    timestamp  :: Integer,
-    last_hash  :: ByteString,
+    header     :: BlockHeader,
+    txns       :: [Transaction],
     block_hash :: ByteString,
-    block_data :: ByteString,
-    nonce      :: ByteString,
-    block_diff :: ByteString }
-    deriving (Show, Eq, Read)
+    block_diff :: ByteString
+} deriving (Show, Eq, Read)
+
+data BlockHeader = BlockHeader {
+    origin      :: ByteString, -- public address of miner
+    prev_hash   :: ByteString,
+    merkle_root :: ByteString, --merkle hash of transasctions
+    timestamp   :: Integer,
+    nonce       :: Integer
+} deriving (Show, Eq, Read)
 
 -- Chain of Blocks / List of Block_Hash
 type Blockchain = [Block]
@@ -34,11 +40,6 @@ type Blockchain = [Block]
 genesis_block = Block 1536570561000 "None" "f1rst_h4sh" "genesis-data" "0" "000"
 init_chain = [genesis_block]
 
--- test data
-next_block = Block 1536831680000 "f1rst_h4sh" "00610a6673b0baed2b47a203b33b24e1135637418ce450b6315d92a04d7e2783" "next-data" "539" "00"
-other_block = Block 1536831936000 "f1rst_h4sh" "0ac1720a077bb02b872a4a42f5652cceca419829b74e7d451b55c17c0b3a4f69" "next-data" "15" "0"
-chain2 = next_block : init_chain
-chain3 = other_block : chain2
 
 -- | Recursive validate a chain:
 -- 
@@ -76,20 +77,12 @@ adjust_diff block time
 
 mineBlock :: Block -> ByteString -> Integer -> IO Block
 mineBlock lastBlock input nonce = do
-    timestamp <- now
-    let hashed    = showBS $ hash_ (showBS timestamp) lastBlock input (showBS nonce)
-    let diff      = adjust_diff lastBlock timestamp
+    timestamp  <- now
+    let hashed = showBS $ hash_ (showBS timestamp) lastBlock input (showBS nonce)
+    let diff   = adjust_diff lastBlock timestamp
     if C.take (C.length diff) hashed == diff
         then return $ Block timestamp (block_hash lastBlock) hashed input (showBS nonce) diff
         else mineBlock lastBlock input (nonce + 1)
-
--- | Show ByteString
-showBS :: Show a => a -> ByteString
-showBS = C.pack . show
-
--- | Current time in millisecond
-now :: IO Integer
-now = round <$> (*1000) <$> getPOSIXTime
 
 -- saveBlock = do
 --     db <- openDb

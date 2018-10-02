@@ -3,13 +3,13 @@
 module Transaction where
 
 import Crypto
-import Block
 import Address
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8
 import Data.List
 import Data.Maybe
+import Data.Time.Clock.POSIX
 
 data Transaction = Transaction {
     header :: TransactionHeader,
@@ -37,7 +37,7 @@ transfer sender recvAddr amount
         return    . Just $ Transaction head_ (hexAddr sender) recvAddr amount
 
 expand_pool :: Transaction -> TransactionPool -> TransactionPool
-expand_pool txn pool = txn : pool
+expand_pool txn pool = if verify_txn txn then txn : pool else pool
 
 reduce_pool :: [Transaction] -> TransactionPool -> TransactionPool
 reduce_pool txns pool = pool \\ txns
@@ -49,3 +49,11 @@ verify_txn txn = verify (fromJust . getPubKey_ $ from txn) (signature $ header t
 -- | Hash transaction data with SHA256
 hash_txn :: Transaction -> Digest SHA256
 hash_txn txn = hash . append (from txn) $ append (to txn) (showBS $ amount txn)    
+
+-- | Current time in millisecond
+now :: IO Integer
+now = round <$> (*1000) <$> getPOSIXTime
+
+-- | Show ByteString
+showBS :: Show a => a -> ByteString
+showBS = pack . show
