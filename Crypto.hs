@@ -10,6 +10,7 @@ module Crypto (
     Digest,
     SHA256,
     KeyPair(..),
+    mkMerkleTree,
     regKeys,
     hexPubKey_,
     getPubKey_
@@ -19,6 +20,7 @@ import Crypto.PubKey.ECC.Prim
 import Crypto.PubKey.ECC.Types
 import Crypto.Number.Serialize
 import Crypto.Hash
+import Crypto.Hash.MerkleTree
 import qualified Crypto.PubKey.ECC.ECDSA as DSA
 import qualified Crypto.PubKey.ECC.Generate as EG
 

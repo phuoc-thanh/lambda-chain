@@ -19,9 +19,9 @@ data Transaction = Transaction {
 } deriving (Eq, Show, Read)
 
 data TransactionHeader = TransactionHeader {
-    txn_index :: Integer,
-    timestamp :: Integer,
-    signature :: Signature
+    txnIndex :: Integer,
+    txnTime  :: Integer,
+    txnSign  :: Signature
 } deriving (Eq, Show, Read)
 
 type TransactionPool = [Transaction]
@@ -44,7 +44,7 @@ reduce_pool txns pool = pool \\ txns
 
 -- | Verify a Signed Trasaction from given signature and data        
 verify_txn :: Transaction -> Bool
-verify_txn txn = verify (fromJust . getPubKey_ $ from txn) (signature $ header txn) (hash_txn txn)
+verify_txn txn = verify (fromJust . getPubKey_ $ from txn) (txnSign $ header txn) (hash_txn txn)
 
 -- | Hash transaction data with SHA256
 hash_txn :: Transaction -> Digest SHA256

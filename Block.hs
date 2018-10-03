@@ -14,22 +14,46 @@ import Control.Concurrent
 import Crypto.Hash
 import Transaction
 
+-- As walking around to find a standard for block/transaction definition,
+-- this time I try to follow Cryptonote/Monero chain design.
+-- https://cryptonote.org/standards/
+-- But having some drops I've made for simplicity of lambda chain
+
 -- The mine rate of bitcoin is 10 min (600s).
 -- This is just demonstration, so I set it to only 3s.
 mine_rate = 3
 
--- Block {timestamp, last_hash, hash, data, nonce}
+-- | Block Structure
+
+-- A block consists of three parts:
+-- - block header,
+-- - base transaction body,
+-- - list of transaction identifiers.	
+-- The list starts with the number of transaction identifiers that it contains.
 data Block = Block {
     header     :: BlockHeader,
     txns       :: [Transaction],
-    block_hash :: ByteString,
-    block_diff :: ByteString
+    -- block_hash :: ByteString,
+    -- block_diff :: ByteString
 } deriving (Show, Eq, Read)
 
+-- | Calculation of Block Identifier
+
+-- The identifier of a block is the result of hashing the following data with Keccak:
+
+-- - size of [block_header, Merkle root hash, and the number of transactions] in bytes (varint)
+-- - block_header,
+-- - Merkle root hash,
+-- - number of transactions (varint).
+
+-- The goal of the Merkle root hash is to "attach" the transactions
+-- referred to in the list to the block header: once the Merkle root
+-- hash is fixed, the transactions cannot be modified.
+
 data BlockHeader = BlockHeader {
-    origin      :: ByteString, -- public address of miner
-    prev_hash   :: ByteString,
-    merkle_root :: ByteString, --merkle hash of transasctions
+    -- major_version :: Int,
+    -- minor_version :: Int,
+    prev_id   :: ByteString,
     timestamp   :: Integer,
     nonce       :: Integer
 } deriving (Show, Eq, Read)
@@ -37,9 +61,12 @@ data BlockHeader = BlockHeader {
 -- Chain of Blocks / List of Block_Hash
 type Blockchain = [Block]
 
-genesis_block = Block 1536570561000 "None" "f1rst_h4sh" "genesis-data" "0" "000"
+genesis_header = BlockHeader "genesis" "th1s" "n0n3" 1538583356613 0
+genesis_block  = Block genesis_header [] "f1rst_h4sh" "000"
 init_chain = [genesis_block]
 
+is_valid_block :: Block -> Bool
+is_valid_block = undefined
 
 -- | Recursive validate a chain:
 -- 

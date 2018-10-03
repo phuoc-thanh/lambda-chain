@@ -8,7 +8,7 @@ import Crypto
 
 data Address = Address {
     keyPair :: KeyPair,
-    hexAddr  :: ByteString,
+    hexAddr :: ByteString,
     balance :: Integer
 } deriving (Eq, Show, Read)
 
