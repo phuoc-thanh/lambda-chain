@@ -13,15 +13,14 @@ import Data.Time.Clock.POSIX
 
 data Transaction = Transaction {
     header :: TransactionHeader,
-    from   :: ByteString,
-    to     :: ByteString,
+    input  :: ByteString,
+    output :: ByteString,
     amount :: Integer
 } deriving (Eq, Show, Read)
 
 data TransactionHeader = TransactionHeader {
-    txnIndex :: Integer,
-    txnTime  :: Integer,
-    txnSign  :: Signature
+    txTime  :: Integer,
+    txSign  :: Signature
 } deriving (Eq, Show, Read)
 
 type TransactionPool = [Transaction]
@@ -33,22 +32,26 @@ transfer sender recvAddr amount
         timestamp <- now
         let data_ = hash . append (hexAddr sender) . append recvAddr $ showBS amount
         sign_     <- sign (snd $ keyPair sender) data_
-        let head_ = TransactionHeader 0 timestamp sign_
+        let head_ = TransactionHeader timestamp sign_
         return    . Just $ Transaction head_ (hexAddr sender) recvAddr amount
 
 expand_pool :: Transaction -> TransactionPool -> TransactionPool
-expand_pool txn pool = if verify_txn txn then txn : pool else pool
+expand_pool tx pool = if verify_txn tx then tx : pool else pool
 
 reduce_pool :: [Transaction] -> TransactionPool -> TransactionPool
 reduce_pool txns pool = pool \\ txns
 
 -- | Verify a Signed Trasaction from given signature and data        
 verify_txn :: Transaction -> Bool
-verify_txn txn = verify (fromJust . getPubKey_ $ from txn) (txnSign $ header txn) (hash_txn txn)
+verify_txn tx = verify (fromJust . getPubKey_ $ input tx) (txSign $ header tx) (hash_txn tx)
 
 -- | Hash transaction data with SHA256
 hash_txn :: Transaction -> Digest SHA256
-hash_txn txn = hash . append (from txn) $ append (to txn) (showBS $ amount txn)    
+hash_txn tx = hash $ showBS tx
+
+-- | Calculate Merkle Root of transactions
+merkle_root :: [Transaction] -> MerkleRoot ByteString
+merkle_root txs = mtRoot . mkMerkleTree $ showBS <$> txs
 
 -- | Current time in millisecond
 now :: IO Integer

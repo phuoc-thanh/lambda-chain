@@ -10,7 +10,10 @@ module Crypto (
     Digest,
     SHA256,
     KeyPair(..),
+    MerkleTree,
+    MerkleRoot,
     mkMerkleTree,
+    mtRoot,
     regKeys,
     hexPubKey_,
     getPubKey_
