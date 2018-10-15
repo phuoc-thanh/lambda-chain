@@ -7,9 +7,9 @@ import Address
 import Persistence
 
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as C
-import Crypto.PubKey.ECC.ECDSA
+import Data.ByteString.Char8 hiding (find)
 import Control.Concurrent
+import Prelude hiding (append, length)
 
 import Crypto
 import Transaction
@@ -29,34 +29,33 @@ mine_rate = 3
 -- A block consists of four parts:
 -- - block header,
 -- - base transaction body,
--- - the number of transaction identifiers
--- - list of transaction identifiers.	
+-- - the number of transactions,
+-- - list of transaction identifiers.
 data Block = Block {
-    blockHeader :: BlockHeader,
+    blockHeader :: BlockHeader,  -- Metadata
     -- baseTx      :: Transaction,  -- Coin base Transaction, or Miner Transaction
     origin      :: ByteString,   -- to be replaced with the baseTx as above
     txNum       :: Int,          -- Number of Transactions
     txHashes    :: [ByteString]  -- List of Transaction Identifiers
 } deriving (Show, Eq, Read)
 
--- | Meta data of Block
 data BlockHeader = BlockHeader {
     prevId     :: ByteString, -- Identifier of the previous block
-    timestamp  :: Int,
-    bits       :: Int,
-    nonce      :: Int
+    timestamp  :: Int,        -- The creation time of block
+    bits       :: Int,        -- Difficulty of block
+    nonce      :: Int         -- Nonce number
 } deriving (Show, Eq, Read)
 
 -- | The identifier of a block
 
 -- Is the result of hashing the following data with SHA256 hash function:
--- - size of [block_header, Merkle root hash, and the number of transactions] in bytes (varint)
+-- - size of [block_header, Merkle root hash, and the number of transactions] in bytes,
 -- - block_header,
 -- - Merkle root hash,
--- - number of transactions (varint).
-block_id (Block h o n tx) = hash (C.append (showBS $ C.length blob) blob)
-    where blob = C.append (showBS h) $ C.append mt (showBS n)
-          mt   = showBS $ mtRoot $ mkMerkleTree (tx)
+-- - number of transactions.
+hash_block_id :: BlockHeader -> [ByteString] -> ByteString
+hash_block_id header txs = showBS . hash $ append (showBS $ length blob) blob
+    where blob = append (showBS header) $ append (merkle_root txs) (showBS $ size txs)
 
 
 -- Chain of Blocks / List of Block_Hash
@@ -66,8 +65,14 @@ genesis_header = BlockHeader "genesis" 1538583356613 00 0
 genesis_block  = Block genesis_header "f1rstM1n3r" 0 []
 init_chain = [genesis_block]
 
-is_valid_block :: Block -> Bool
-is_valid_block = undefined
+-- Is a block valid?
+is_valid_block :: ByteString -> Block -> Block -> Bool
+is_valid_block block_id block prev
+    | block_id /= hash_block_id (blockHeader block) (txHashes block) = False
+    | prev_id  /= hash_block_id (blockHeader prev)  (txHashes prev)  = False
+    -- | -- validate transactions here
+    | otherwise = True
+    where prev_id = prevId $ blockHeader block
 
 -- | Recursive validate a chain:
 -- 
@@ -88,21 +93,27 @@ replace_chain = undefined
 -- -- Adjust the difficulty of mining process                                
 -- adjust_diff :: Block -> Integer -> ByteString                                
 -- adjust_diff block time
---     | (timestamp block) + mine_rate > time = C.append "0" (block_diff block)
---     | otherwise = C.init (block_diff block)
+--     | (timestamp block) + mine_rate > time = append "0" (block_diff block)
+--     | otherwise = init (block_diff block)
 
 -- mineBlock :: Block -> ByteString -> Integer -> IO Block
 -- mineBlock lastBlock input nonce = do
 --     timestamp  <- now
 --     let hashed = showBS $ hash_ (showBS timestamp) lastBlock input (showBS nonce)
 --     let diff   = adjust_diff lastBlock timestamp
---     if C.take (C.length diff) hashed == diff
+--     if take (length diff) hashed == diff
 --         then return $ Block timestamp (block_hash lastBlock) hashed input (showBS nonce) diff
 --         else mineBlock lastBlock input (nonce + 1)
 
--- saveBlock = do
---     db <- openDb
---     -- push_single db ((block_hash genesis_block), showBS genesis_block)
---     -- threadDelay 3000000
---     updated <- try 2 $ find db "@" $ "f1rst_h4sh"
---     return updated
+
+-- genesis hash: fc89748c6b236a6eb8adbf4407ee75eae8f9ef770b6222c56130145775f1dc33
+init_genesis = do
+    db <- start_lmdb
+    push_single db (hash_block_id genesis_header [], showBS genesis_block)
+
+find_block block_id = do
+    (txn, dbi) <- open_lmdb "@"
+    val <- find_ txn dbi block_id
+    case val of
+        Nothing -> print "Nothing - return from lmdb"
+        value   -> print value

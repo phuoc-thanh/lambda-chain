@@ -9,7 +9,7 @@ import Crypto
 data Address = Address {
     keyPair :: KeyPair,
     hexAddr :: ByteString,
-    balance :: Integer
+    balance :: Int
 } deriving (Eq, Show, Read)
 
 new_addr :: IO Address

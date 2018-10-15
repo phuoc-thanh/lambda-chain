@@ -37,15 +37,25 @@ initNode :: IO ()
 initNode = do
     (txn, ref) <- open_lmdb "#"
     addr       <- new_addr
-    put txn ref ("node_addr", hexAddr addr)
-    put txn ref ("node_keys", pack . show $ keyPair addr)
+    put txn ref ("hex_addr" , hexAddr addr)
+    put txn ref ("node_addr", showBS addr)
+    put txn ref ("node_keys", showBS $ keyPair addr)
+    put txn ref ("balance"  , "50")
     commit_txn txn
     print $ append "Node is registered, node_addr: " (hexAddr addr)
 
 -- | Return the hex-version PublicKey of Node    
-getPublicAddress db = do
-    addr   <- Persistence.find db "#" "node_addr"
+getPublicAddress = do
+    (txn, dbi) <- open_lmdb "#" 
+    addr       <- find_ txn dbi "hex_addr"
     return $ fromJust addr    
+
+send_to :: ByteString -> Int -> IO (Maybe Transaction)
+send_to recvAddr amount = do
+    (txn, dbi) <- open_lmdb "#"
+    node_addr  <- find_ txn dbi "node_addr"
+    let addr    = read . unpack $ fromJust node_addr :: Address
+    transfer addr recvAddr amount
 
 sycn_chain :: Socket -> Blockchain -> IO ()    
 sycn_chain sock bc = do

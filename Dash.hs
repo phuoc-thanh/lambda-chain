@@ -26,6 +26,7 @@ import Block
 data Cmd = Conn String String
          | Mine Block
          | Peers
+         | Txn String Int
          | Raw String
          deriving (Show, Eq)
 
@@ -33,8 +34,9 @@ data Cmd = Conn String String
 toCmd :: Maybe String -> Cmd
 toCmd Nothing = Raw "Nothing"
 toCmd (Just input)
-    | isInfixOf "connect" input = Conn (head args) (last args)
-    | isInfixOf "peers"   input = Peers
+    | isInfixOf "connect"  input = Conn (head args) (last args)
+    | isInfixOf "transfer" input = Txn  (head args) (read $ last args :: Int)
+    | isInfixOf "peers"    input = Peers
     | otherwise = Raw input
     where args = tail $ words input
 
@@ -54,6 +56,10 @@ loopCmd st = do
         Peers    -> liftIO $ do
             socks <- tryReadMVar (_peers st)
             print socks
+        Txn a m  -> liftIO $ do
+            socks <- tryReadMVar (_peers st)
+            tx    <- send_to (C.pack a) m
+            sendNetwork (fromJust socks) (C.append "txn:" (showBS tx))
         Raw m    -> liftIO $ do
             socks <- tryReadMVar (_peers st)
             sendNetwork (fromJust socks) (C.pack m)    

@@ -80,13 +80,13 @@ start_lmdb = do
     threadDelay 2000000
     return db
 
--- | Open lmdb without writer, to get a transaction on specified db table
+-- | Open lmdb with a transaction on one specified database
 open_lmdb :: String -> IO (MDB_txn, MDB_dbi')  
-open_lmdb dbi = do
+open_lmdb db = do
     env <- initEnv "data.mdb"
     txn <- mdb_txn_begin env Nothing False
-    ref <- mdb_dbi_open' txn (Just dbi) []
-    return (txn, ref)
+    dbi <- mdb_dbi_open' txn (Just db) []
+    return (txn, dbi)
 
 reset_lmdb = do
     clearDb "@"
@@ -96,12 +96,10 @@ reset_lmdb = do
 -- -----------------------------------------------------------------------------
 -- | Basic Get/Put Commands
 -- -----------------------------------------------------------------------------
-
--- Get the reference value
-get_ref txn dbi k = do
-    val <- withBS_as_val k $ get txn dbi
-    return $ fromJust val
     
+-- | Find value by a read txn on specified dbi
+find_ txn dbi k = withBS_as_val k $ get txn dbi
+
 -- | Find value in specified db
 find :: Lambdadb -> String -> ByteString -> IO (Maybe ByteString)
 find db t k = do -- t: db name, # or @

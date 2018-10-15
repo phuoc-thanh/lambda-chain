@@ -12,8 +12,7 @@ module Crypto (
     KeyPair(..),
     MerkleTree,
     MerkleRoot,
-    mkMerkleTree,
-    mtRoot,
+    merkle_root,
     regKeys,
     hexPubKey_,
     getPubKey_
@@ -89,6 +88,10 @@ isPointValid_ x y = isPointValid secp256k1 (Point x y)
 -- | Hash raw data with SHA256 hash function
 hash :: ByteString -> Digest SHA256
 hash m = hashWith SHA256 m
+
+-- | Return mekle root of hashed leaves
+merkle_root :: [ByteString] -> ByteString
+merkle_root = mtHash . mkMerkleTree
 
 -- | Sign with SHA256 hash function
 sign :: DSA.PrivateKey -> Digest SHA256 -> IO DSA.Signature
