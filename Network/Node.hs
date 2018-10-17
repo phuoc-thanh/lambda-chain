@@ -9,10 +9,11 @@ import Control.Monad (forM_, unless)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8
 import Data.Maybe
-import Prelude hiding (takeWhile, dropWhile, tail, null)
+import Prelude hiding (takeWhile, dropWhile, take, tail, null, length, replicate)
 
 import Address
 import Block
+import Crypto
 import Transaction
 import Persistence
 import Network.Connection
@@ -25,8 +26,8 @@ data NodeInfo = NodeInfo {
 } deriving (Show, Read, Eq)
 
 data NodeState = NodeState {
-    _chain :: MVar Blockchain,
-    _pool  :: MVar TransactionPool,
+    _chain :: MVar [Block],
+    _pool  :: MVar [Transaction],
     _peers :: MVar [Socket]
 }
 
@@ -45,17 +46,49 @@ initNode = do
     print $ append "Node is registered, node_addr: " (hexAddr addr)
 
 -- | Return the hex-version PublicKey of Node    
-getPublicAddress = do
-    (txn, dbi) <- open_lmdb "#" 
-    addr       <- find_ txn dbi "hex_addr"
-    return $ fromJust addr    
+getPublicAddress = find' "#" "hex_addr"    
 
 send_to :: ByteString -> Int -> IO (Maybe Transaction)
 send_to recvAddr amount = do
-    (txn, dbi) <- open_lmdb "#"
-    node_addr  <- find_ txn dbi "node_addr"
-    let addr    = read . unpack $ fromJust node_addr :: Address
+    node_addr  <- find' "#" "node_addr"
+    let addr    = read $ unpack node_addr :: Address
     transfer addr recvAddr amount
+
+-- The mine rate of bitcoin is 10 min (600s).
+-- This is just demonstration, so I set it to only 3s.
+mine_rate = 3
+
+mine_block :: [Transaction] -> IO Block
+mine_block txs = do
+    timestamp  <- now
+    origin     <- getPublicAddress
+    let txH    =  Transaction.hash_id <$> txs
+    let m_root =  merkle_root txH
+    prev_id    <- last_block_id
+    bits       <- adjust_diff
+    header     <- hash_calculate origin prev_id m_root bits 0
+    return $ Block header origin (size txH) txH
+
+-- | Calcualte block_hash, then return a BlockHeader (that holds nonce n timestamp)
+hash_calculate origin prev_id m_root bits nonce = do
+    timestamp  <- now
+    let hashed = showBS . hash . append prev_id 
+                               . append (showBS timestamp) 
+                               . append m_root 
+                               $ append origin (showBS nonce)
+    if take bits hashed == replicate bits '0'
+        then return $ BlockHeader prev_id timestamp m_root bits nonce
+        else hash_calculate origin prev_id m_root bits (nonce + 1)
+
+
+-- Adjust the difficulty of mining process                                
+adjust_diff :: IO Int                                
+adjust_diff = do
+    blk <- last_block
+    let b = bits (blockHeader blk)
+    let t = timestamp (blockHeader blk)
+    if t + mine_rate > t then return $ b + 1 else return $ b - 1
+
 
 sycn_chain :: Socket -> Blockchain -> IO ()    
 sycn_chain sock bc = do
@@ -98,4 +131,4 @@ req_handle sock st = do
         case (rawToMsg raw) of          
             TxnReq txn -> modifyMVarMasked_ (_pool st) $ \txns -> return $ expand_pool txn txns
             BlockReq b -> modifyMVarMasked_ (_chain st) $ \lst -> return $ b:lst
-            Raw -> return ()            
+            Raw m      -> print m

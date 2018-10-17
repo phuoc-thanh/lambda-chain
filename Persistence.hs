@@ -23,8 +23,9 @@ import Control.Concurrent
 -- | Lambda Database: a usecase of lmdb
 -- -----------------------------------------------------------------------------
 
+-- Remove MDB_WRITEMAP, coz it enlarges db to 4gb on OSX
 lmdbEnvF :: [MDB_EnvFlag]
-lmdbEnvF = [MDB_NOLOCK, MDB_WRITEMAP]
+lmdbEnvF = [MDB_NOLOCK]
 
 data Lambdadb = Lambdadb {
     db_env    :: !MDB_env,
@@ -53,7 +54,8 @@ initDb fp = do
     txn <- mdb_txn_begin env Nothing False
     data_dbi <- mdb_dbi_open' txn (Just "@") [MDB_CREATE]
     ref_dbi  <- mdb_dbi_open' txn (Just "#") [MDB_CREATE]
-    -- put txn ref_dbi ("blocks", "1")
+    put txn ref_dbi ("block_seq", "1")
+    put txn ref_dbi ("block_1", "aba372dbb78ce57002215bfa84006cbf1d23c28e3837dc95099e1366d9f59770")
     mdb_txn_commit txn
 
 -- Truncate a Database
@@ -96,9 +98,16 @@ reset_lmdb = do
 -- -----------------------------------------------------------------------------
 -- | Basic Get/Put Commands
 -- -----------------------------------------------------------------------------
-    
--- | Find value by a read txn on specified dbi
-find_ txn dbi k = withBS_as_val k $ get txn dbi
+
+-- | Find value in specified db, no lmdb instance required
+find' :: String -> ByteString -> IO ByteString
+find' db key = do
+    (txn, dbi) <- open_lmdb db
+    val        <- withBS_as_val key $ get txn dbi
+    mdb_txn_commit txn
+    case val of
+        Nothing -> return "Nothing in lambda-db"
+        Just v  -> return v
 
 -- | Find value in specified db
 find :: Lambdadb -> String -> ByteString -> IO (Maybe ByteString)

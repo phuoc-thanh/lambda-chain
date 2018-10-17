@@ -24,8 +24,9 @@ import Block
 
 -- | Define Type of Commands
 data Cmd = Conn String String
-         | Mine Block
+         | Mine
          | Peers
+         | Tx_Pool
          | Txn String Int
          | Raw String
          deriving (Show, Eq)
@@ -36,7 +37,9 @@ toCmd Nothing = Raw "Nothing"
 toCmd (Just input)
     | isInfixOf "connect"  input = Conn (head args) (last args)
     | isInfixOf "transfer" input = Txn  (head args) (read $ last args :: Int)
+    | isInfixOf "mine"     input = Mine
     | isInfixOf "peers"    input = Peers
+    | isInfixOf "tx-pool"  input = Tx_Pool
     | otherwise = Raw input
     where args = tail $ words input
 
@@ -53,13 +56,20 @@ loopCmd st = do
         Conn h p -> liftIO $ do
             sock <- connect_ (h, p)
             modifyMVarMasked_ (_peers st) $ \lst -> return $ sock:lst
-        Peers    -> liftIO $ do
-            socks <- tryReadMVar (_peers st)
-            print socks
+        Peers    -> liftIO $ tryReadMVar (_peers st) >>= print
+        Tx_Pool  -> liftIO $ tryReadMVar (_pool st)  >>= print
         Txn a m  -> liftIO $ do
-            socks <- tryReadMVar (_peers st)
-            tx    <- send_to (C.pack a) m
-            sendNetwork (fromJust socks) (C.append "txn:" (showBS tx))
+            socks   <- tryReadMVar (_peers st)
+            maybeTx <- send_to (C.pack a) m
+            case maybeTx of
+                Nothing -> print "invalid Tx"
+                Just tx -> do
+                    modifyMVarMasked_ (_pool st) $ \txs -> return $ expand_pool tx txs
+                    sendNetwork (fromJust socks) (C.append "txn:" (showBS tx))
+        Mine     -> liftIO $ do
+            txs <- tryReadMVar (_pool st)
+            block <- mine_block $ fromJust txs
+            print block            
         Raw m    -> liftIO $ do
             socks <- tryReadMVar (_peers st)
             sendNetwork (fromJust socks) (C.pack m)    
