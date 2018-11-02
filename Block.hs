@@ -38,7 +38,7 @@ data Block = Block {
 data BlockHeader = BlockHeader {
     prevId      :: ByteString, -- Identifier of the previous block
     timestamp   :: Int,        -- The creation time of block
-    merkleRoot :: ByteString,
+    merkleRoot  :: ByteString, -- Merkle Root of transactions
     bits        :: Int,        -- Difficulty of block
     nonce       :: Int         -- Nonce number
 } deriving (Show, Eq, Read)
@@ -58,7 +58,7 @@ hash_id header txs = showBS . hash $ append (showBS $ length blob) blob
 -- Chain of Blocks / List of Block_Hash
 type Blockchain = [ByteString]
 
-genesis_header = BlockHeader "genesis" 1538583356613 "no-merkle-root" 00 0
+genesis_header = BlockHeader "genesis" 1538583356613 "no-merkle-root" 3 0
 genesis_block  = Block genesis_header "f1rstM1n3r" 0 []
 init_chain = [genesis_block]
 

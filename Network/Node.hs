@@ -84,10 +84,11 @@ hash_calculate origin prev_id m_root bits nonce = do
 -- Adjust the difficulty of mining process                                
 adjust_diff :: IO Int                                
 adjust_diff = do
-    blk <- last_block
+    blk  <- last_block
     let b = bits (blockHeader blk)
     let t = timestamp (blockHeader blk)
-    if t + mine_rate > t then return $ b + 1 else return $ b - 1
+    time <- now
+    if t + mine_rate > time then return $ b - 1 else return $ b + 1
 
 
 sycn_chain :: Socket -> Blockchain -> IO ()    
@@ -113,7 +114,7 @@ go_live p2p_port = do
     }
     forkIO $ listen_ sock (_peers state)
     forkIO $ conn_handle state
-    return state    
+    return state
 
 -- | Handle Connections
 conn_handle :: NodeState -> IO ()
