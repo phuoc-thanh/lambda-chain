@@ -55,9 +55,9 @@ initDb fp = do
     txn <- mdb_txn_begin env Nothing False
     data_dbi <- mdb_dbi_open' txn (Just "@") [MDB_CREATE]
     ref_dbi  <- mdb_dbi_open' txn (Just "#") [MDB_CREATE]
-    put txn ref_dbi ("block_seq", "1")
-    put txn ref_dbi ("tx_seq", "0")
-    put txn ref_dbi ("block_1", "aba372dbb78ce57002215bfa84006cbf1d23c28e3837dc95099e1366d9f59770")
+    put txn ref_dbi ("block", "0")
+    put txn ref_dbi ("tx#", "0")
+    put txn ref_dbi ("block#1", "block#c8925588637c65e719681d1275d8d87c2b305744992e1e7ff6597bb5f918e9e6")
     mdb_txn_commit txn
 
 -- Truncate a Database
@@ -147,7 +147,9 @@ push_commit db cm = do
 get_ref txn dbi k = do
     val <- withBS_as_val (key_prefix k) $ get txn dbi
     case val of
-        Nothing -> return "LMDB: Can't find the sequence reference"
+        Nothing -> do
+            print "LMDB: Can't find the sequence reference"
+            return "00"
         Just v  -> return v
 
 -- Increment the sequence and put a 
@@ -232,10 +234,13 @@ lambdaWriter db = do
     forM_ (M.toList cm) $ \(k, v) -> do
         look_ <- withBS_as_val k $ get txn data_dbi
         case look_ of
-            Nothing -> do                          -- case: write new
-                incr_key <- put_ref txn ref_dbi k
-                put txn data_dbi (incr_key, v)
-            Just val -> update txn data_dbi (k, v) -- case: override
+            Nothing -> do  -- case: write new
+                ref <- put_ref txn ref_dbi k       -- increment seq
+                put txn ref_dbi (ref, k)           -- put ref key
+                put txn data_dbi (k, v)            -- put data
+            Just val -> do -- case: override
+                print "key found, replace old value"
+                update txn data_dbi (k, v)
     -- commit
     mdb_txn_commit txn
     -- Thread Delay - Optional

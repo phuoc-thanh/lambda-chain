@@ -26,6 +26,8 @@ import Block
 data Cmd = Conn String String
          | Mine
          | Peers
+         | Block_ Int
+         | BlockHeight
          | Tx_Pool
          | Txn String Int
          | Raw String
@@ -40,6 +42,8 @@ toCmd (Just input)
     | isInfixOf "mine"     input = Mine
     | isInfixOf "peers"    input = Peers
     | isInfixOf "tx-pool"  input = Tx_Pool
+    | isInfixOf "block"    input = Block_ (read $ head args :: Int)
+    | isInfixOf "height"   input = BlockHeight
     | otherwise = Raw input
     where args = tail $ words input
 
@@ -69,7 +73,14 @@ loopCmd st = do
         Mine     -> liftIO $ do
             txs <- tryReadMVar (_pool st)
             block <- mine_block $ fromJust txs
-            print block            
+            print "A new block was mined, sending to network.."
+            print block
+            socks <- tryReadMVar (_peers st)
+            sendNetwork (fromJust socks) (C.append "block:" (showBS block))
+        Block_ i -> liftIO $ do
+            block <- find_by_index $ C.append "block#" (showBS i)
+            print block
+        BlockHeight -> liftIO $ block_height >>= print
         Raw m    -> liftIO $ do
             socks <- tryReadMVar (_peers st)
             sendNetwork (fromJust socks) (C.pack m)    

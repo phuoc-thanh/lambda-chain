@@ -35,8 +35,8 @@ data NodeState = NodeState {
 -- | Initiate a new Node Environment, for the first time Node is live
 -- 
 -- A new Address is generated for new Node, and save to lmdb.
-initNode :: IO ()
-initNode = do
+init_node :: IO ()
+init_node = do
     (txn, ref) <- open_lmdb "#"
     addr       <- new_addr
     put txn ref ("hex_addr" , hexAddr addr)
@@ -56,8 +56,8 @@ send_to recvAddr amount = do
     transfer addr recvAddr amount
 
 -- The mine rate of bitcoin is 10 min (600s).
--- This is just demonstration, so I set it to only 3s.
-mine_rate = 3
+-- This is just demonstration, so I set it to only 4s.
+mine_rate = 4
 
 mine_block :: [Transaction] -> IO Block
 mine_block txs = do
@@ -131,6 +131,9 @@ req_handle sock st = do
     unless (null raw) $ do
         case (rawToMsg raw) of          
             TxnReq txn -> modifyMVarMasked_ (_pool st) $ \txns -> return $ expand_pool txn txns
-            BlockReq b -> save_block b (_db st)
+            BlockReq b -> do
                 -- TODO: verify block and clear pool
+                print "received a block request, adding to db.."
+                save_block b (_db st)
+                print "Done"
             Raw m      -> print m

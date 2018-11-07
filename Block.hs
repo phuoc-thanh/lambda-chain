@@ -58,9 +58,8 @@ hash_id header txs = showBS . hash $ append (showBS $ length blob) blob
 -- Chain of Blocks / List of Block_Hash
 type Blockchain = [ByteString]
 
-genesis_header = BlockHeader "genesis" 1538583356613 "no-merkle-root" 3 0
+genesis_header = BlockHeader "genesis" 1538583356613 "no-merkle-root" 4 0
 genesis_block  = Block genesis_header "f1rstM1n3r" 0 []
-init_chain = [genesis_block]
 
 -- Is a block valid?
 is_valid_block :: ByteString -> Block -> Block -> Bool
@@ -94,8 +93,9 @@ is_valid_chain (blk:prev:chain) = do
     
 
 init_genesis = do
+    reset_lmdb
     db <- start_lmdb
-    push_single db (Block.hash_id genesis_header [], showBS genesis_block)
+    push_single db (append "block#" $ Block.hash_id genesis_header [], showBS genesis_block)
 
 -- -----------------------------------------------------------------------------
 -- | Persistence
@@ -110,11 +110,15 @@ init_genesis = do
 
 find_by_id block_id = find' "@" block_id
 
-block_height = find' "#" "block_seq"
+find_by_index block_height = do
+    block_id <- find' "#" block_height
+    find' "@" block_id
+
+block_height = find' "#" "block"
 
 last_block_id = do
     h <- block_height
-    find' "#" (append "block_" h)
+    find' "#" (append "block#" h)
 
 last_block :: IO Block
 last_block = do
@@ -125,11 +129,10 @@ last_block = do
 
 prev_block blk = find' "@" (prevId $ blockHeader blk)
 
-
 -- Save a block to db
 save_block blk db = do
-    let block_id = Block.hash_id header txs
-    let block_v  = append "block#" (showBS blk)
-    push_single db (block_id, block_v)
+    let block_k = append "block#" $ Block.hash_id header txs
+    let block_v  = showBS blk
+    push_single db (block_k, block_v)
     where header = blockHeader blk
           txs    = txHashes    blk
