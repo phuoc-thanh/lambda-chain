@@ -49,12 +49,14 @@ initEnv fp = do
     return env
 
 -- Open or Create db
+-- Initiate sample data and seq infos
 initDb fp = do
     env <- initEnv fp
     txn <- mdb_txn_begin env Nothing False
     data_dbi <- mdb_dbi_open' txn (Just "@") [MDB_CREATE]
     ref_dbi  <- mdb_dbi_open' txn (Just "#") [MDB_CREATE]
     put txn ref_dbi ("block_seq", "1")
+    put txn ref_dbi ("tx_seq", "0")
     put txn ref_dbi ("block_1", "aba372dbb78ce57002215bfa84006cbf1d23c28e3837dc95099e1366d9f59770")
     mdb_txn_commit txn
 
@@ -141,6 +143,21 @@ push_commit db cm = do
 -- | Transaction Commands
 -- -----------------------------------------------------------------------------
 
+-- get the last key in sequence   
+get_ref txn dbi k = do
+    val <- withBS_as_val (key_prefix k) $ get txn dbi
+    case val of
+        Nothing -> return "LMDB: Can't find the sequence reference"
+        Just v  -> return v
+
+-- Increment the sequence and put a 
+put_ref txn dbi k = do
+    key_seq  <- get_ref txn dbi k
+    let current_seq =  read (C.unpack key_seq) :: Int
+    let new_seq     = C.pack $ show $ current_seq + 1
+    update txn dbi (key_prefix k, new_seq)
+    return $ C.append (key_prefix k) $ C.append "#" new_seq
+
 get :: MDB_txn -> MDB_dbi' -> MDB_val -> IO (Maybe ByteString)
 get txn dbi k = do
     mdb_val <- mdb_get' txn dbi k
@@ -160,7 +177,6 @@ update txn dbi (k, v) = do
         withBS_as_val v $ \value -> do
             mdb_del' txn dbi key Nothing
             mdb_put' writeflags txn dbi key value
-                   
 
 commit_txn txn = mdb_txn_commit txn            
 
@@ -188,7 +204,10 @@ mdbVal_to_BS (MDB_val mv_size mv_data)
     | otherwise = BS.create len $ \dst -> BS.memcpy dst mv_data len
         where len = fromIntegral mv_size
     
-        
+-- Return the prefix of a key
+key_prefix :: ByteString -> ByteString        
+key_prefix = C.takeWhile (/='#')
+
 -- -----------------------------------------------------------------------------
 -- | LambdaDb Writer
 -- -----------------------------------------------------------------------------
@@ -214,8 +233,8 @@ lambdaWriter db = do
         look_ <- withBS_as_val k $ get txn data_dbi
         case look_ of
             Nothing -> do                          -- case: write new
-                update txn ref_dbi ("current_block", k) 
-                put txn data_dbi (k, v) 
+                incr_key <- put_ref txn ref_dbi k
+                put txn data_dbi (incr_key, v)
             Just val -> update txn data_dbi (k, v) -- case: override
     -- commit
     mdb_txn_commit txn

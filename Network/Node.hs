@@ -26,7 +26,8 @@ data NodeInfo = NodeInfo {
 } deriving (Show, Read, Eq)
 
 data NodeState = NodeState {
-    _chain :: MVar [Block],
+    -- _chain :: MVar [Block],
+    _db    :: Lambdadb,
     _pool  :: MVar [Transaction],
     _peers :: MVar [Socket]
 }
@@ -101,14 +102,13 @@ sycn_chain sock bc = do
 
 -- | Go live a node, with empty chain, peers and txn_pool
 go_live p2p_port = do
-    db         <- start_lmdb
+    lambdaDb   <- start_lmdb
     sock       <- listenOn p2p_port
-    blockchain <- newEmptyMVar
     txn_pool   <- newMVar mempty
     peers      <- newMVar mempty
     -- Initiate Node State
     let state  = NodeState {
-        _chain = blockchain,
+        _db    = lambdaDb,
         _pool  = txn_pool,
         _peers = peers
     }
@@ -124,12 +124,13 @@ conn_handle st = do
     forM_ (fromJust conn) $ \s -> req_handle s st
     conn_handle st
 
--- | Hanle incoming requests    
+-- | Handle incoming requests    
 req_handle :: Socket -> NodeState -> IO ()    
 req_handle sock st = do
     raw <- recv sock 1024
     unless (null raw) $ do
         case (rawToMsg raw) of          
             TxnReq txn -> modifyMVarMasked_ (_pool st) $ \txns -> return $ expand_pool txn txns
-            BlockReq b -> modifyMVarMasked_ (_chain st) $ \lst -> return $ b:lst
+            BlockReq b -> save_block b (_db st)
+                -- TODO: verify block and clear pool
             Raw m      -> print m

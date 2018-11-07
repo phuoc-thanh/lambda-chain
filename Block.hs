@@ -87,9 +87,11 @@ is_valid_chain (blk:prev:chain) = do
         True  -> is_valid_chain (prev:chain)
 
 
--- -- Verify and update to new longer chain if the new chain valids
+-- -- Verify and update block to latest chain
 -- replace_chain :: Blockchain -> Blockchain -> IO Blockchain
-replace_chain = undefined
+-- accept_block blk = do
+--     last_hash <- last_block_id
+    
 
 init_genesis = do
     db <- start_lmdb
@@ -104,7 +106,7 @@ init_genesis = do
 -- that presents how old a block.
 
 -- | On "@" database, lmdb writes pair of (block_id, block)
--- is the data inside of a block
+-- This is the data inside of a block
 
 find_by_id block_id = find' "@" block_id
 
@@ -114,6 +116,7 @@ last_block_id = do
     h <- block_height
     find' "#" (append "block_" h)
 
+last_block :: IO Block
 last_block = do
     block_id <- last_block_id
     val      <- find' "@" block_id
@@ -121,3 +124,12 @@ last_block = do
     return block
 
 prev_block blk = find' "@" (prevId $ blockHeader blk)
+
+
+-- Save a block to db
+save_block blk db = do
+    let block_id = Block.hash_id header txs
+    let block_v  = append "block#" (showBS blk)
+    push_single db (block_id, block_v)
+    where header = blockHeader blk
+          txs    = txHashes    blk
