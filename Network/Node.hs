@@ -26,10 +26,9 @@ data NodeInfo = NodeInfo {
 } deriving (Show, Read, Eq)
 
 data NodeState = NodeState {
-    -- _chain :: MVar [Block],
-    _db    :: Lambdadb,
-    _pool  :: MVar [Transaction],
-    _peers :: MVar [Socket]
+    _db        :: Lambdadb,
+    _pool      :: MVar [Transaction],
+    _peers     :: MVar [Socket],
 }
 
 -- | Initiate a new Node Environment, for the first time Node is live
@@ -57,7 +56,7 @@ send_to recvAddr amount = do
 
 -- The mine rate of bitcoin is 10 min (600s).
 -- This is just demonstration, so I set it to only 4s.
-mine_rate = 4
+mine_rate = 4000
 
 mine_block :: [Transaction] -> IO Block
 mine_block txs = do
@@ -91,14 +90,21 @@ adjust_diff = do
     time <- now
     if t + mine_rate > time then return $ b - 1 else return $ b + 1
 
+-- Synchronize local ledger with the world state ledger
+-- 1. First, request block_height number from connected peers
+-- 2. Check height, select the highesh one (longest ledger), says, from Node X
+-- 3. Send a get request to Node X with current local block_height
+-- 4. Receive [Block] from Node X that contains array of missing blocks
+-- 5. Verify recursively from latest block to current local block height
+-- 6. If Verified, update, or re select ledger.
+-- Consider the re-select process, and the synchronize time, if larger than mine_rate, the process need to reroll
+sync_chain :: NodeState -> IO ()
+sync_chain st = do
+    peers <- tryReadMVar (_peers st)
+    let socks = fromJust peers
+    sendNetwork socks "blocks?"
+    -- res <- recv
 
-sycn_chain :: Socket -> Blockchain -> IO ()    
-sycn_chain sock bc = do
-    let msg = append "sync_chain:" (pack $ show bc)
-    sendAll sock msg
-    threadDelay 2048
-    res <- recv sock 1024
-    print res    
 
 -- | Go live a node, with empty chain, peers and txn_pool
 go_live p2p_port = do
@@ -136,4 +142,8 @@ req_handle sock st = do
                 print "received a block request, adding to db.."
                 save_block b (_db st)
                 print "Done"
+            ChainInfo  -> do
+                print "received a block query.."
+                blocks <- block_height
+                sendAll sock blocks
             Raw m      -> print m

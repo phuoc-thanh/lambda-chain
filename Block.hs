@@ -70,20 +70,9 @@ is_valid_block block_id block prev
     | otherwise = True
     where prev_id = prevId $ blockHeader block
 
--- | Recursive validate a chain:
-is_valid_chain :: Blockchain -> IO Bool
-is_valid_chain (b:[]) = do
-    block <- find_by_id b
-    let b0 = read $ unpack block :: Block
-    if b0 == genesis_block then return True else return False
-is_valid_chain (blk:prev:chain) = do
-    block <- find_by_id blk
-    prevB <- find_by_id prev
-    let b1 = read $ unpack block :: Block
-    let b2 = read $ unpack prevB :: Block
-    case is_valid_block blk b1 b2 of
-        False -> return False
-        True  -> is_valid_chain (prev:chain)
+-- | Recursive validate a chain of blocks
+is_valid_chain :: [Block] -> IO Bool
+is_valid_chain = undefined
 
 
 -- -- Verify and update block to latest chain
