@@ -2,6 +2,21 @@
 
 Haskell implementation of a simple blockchain
 
+## Main goals
+
+Lambda Chain main goals are below, ordered by priority.
+
+1. Lambda Chain: Proof-of-Work [Completed]
+The first part of research is to build a minimal viable blockchain, only core modules for demonstrating the research.
+
+2. Lambda Chain: Cryptocurrency [Partial Completed]
+The 2nd part of research, is to build a digital asset-like / electronic cash working on top of lambda chain. Nodes in chain are also have capale to handle memory pool and higher level of interaction.
+
+3. Distributed Ledger Technology [On plan]
+The completed chain should be a distributed database product, provide a small network with a append-only ledger(database)
+
+4. Assets and Contracts
+
 ## Install Lightning DB (lmdb)
 
 Via Package Manager on Unix system (brew, yum, apt...)
@@ -28,17 +43,3 @@ Via Package Manager on Unix system (brew, yum, apt...)
 4. transfer [address] [amount]
 5. mine
 
-## Main goals
-
-Lambda Chain main goals are below, ordered by priority.
-
-1. Lambda Chain: Proof-of-Work [Completed]
-The first part of research is to build a minimal viable blockchain, only core modules for demonstrating the research.
-
-2. Lambda Chain: Cryptocurrency [Partial Completed]
-The 2nd part of research, is to build a digital asset-like / electronic cash working on top of lambda chain. Nodes in chain are also have capale to handle memory pool and higher level of interaction.
-
-3. Distributed Ledger Technology [On plan]
-The completed chain should be a distributed database product, provide a small network with a append-only ledger(database)
-
-4. Assets and Contracts
