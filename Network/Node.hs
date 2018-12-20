@@ -9,7 +9,7 @@ import Control.Monad (forM_, unless)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8
 import Data.Maybe
-import Prelude hiding (takeWhile, dropWhile, take, tail, null, length, replicate)
+import Prelude hiding (takeWhile, dropWhile, take, tail, null, length, replicate, concat)
 
 import Address
 import Block
@@ -28,22 +28,31 @@ data NodeInfo = NodeInfo {
 data NodeState = NodeState {
     _db        :: Lambdadb,
     _pool      :: MVar [Transaction],
-    _peers     :: MVar [Socket],
+    _peers     :: MVar [Socket]
 }
 
 -- | Initiate a new Node Environment, for the first time Node is live
--- 
--- A new Address is generated for new Node, and save to lmdb.
+
+{- A new Address will be generated for new Node, and save to lmdb.
+   Node's ledger is also be reset to keep only the genesis block. -}
 init_node :: IO ()
 init_node = do
+    reset_lmdb
     (txn, ref) <- open_lmdb "#"
     addr       <- new_addr
     put txn ref ("hex_addr" , hexAddr addr)
     put txn ref ("node_addr", showBS addr)
     put txn ref ("node_keys", showBS $ keyPair addr)
     put txn ref ("balance"  , "50")
+    put txn ref ("block#1"  , "block#c8925588637c65e719681d1275d8d87c2b305744992e1e7ff6597bb5f918e9e6")
     commit_txn txn
+    (txn2, db) <- open_lmdb "@"
+    put txn2 db (append "block#" $ Block.hash_id genesis_header [], showBS genesis_block)
+    commit_txn txn2
     print $ append "Node is registered, node_addr: " (hexAddr addr)
+    where
+        genesis_block  = Block genesis_header "f1rstM1n3r" 0 []
+        genesis_header = BlockHeader "genesis" 1538583356613 "no-merkle-root" 4 0
 
 -- | Return the hex-version PublicKey of Node    
 getPublicAddress = find' "#" "hex_addr"    
@@ -72,10 +81,7 @@ mine_block txs = do
 -- | Calcualte block_hash, then return a BlockHeader (that holds nonce n timestamp)
 hash_calculate origin prev_id m_root bits nonce = do
     timestamp  <- now
-    let hashed = showBS . hash . append prev_id 
-                               . append (showBS timestamp) 
-                               . append m_root 
-                               $ append origin (showBS nonce)
+    let hashed = showBS . Crypto.hash $ concat [prev_id, showBS timestamp, m_root, origin, showBS nonce]
     if take bits hashed == replicate bits '0'
         then return $ BlockHeader prev_id timestamp m_root bits nonce
         else hash_calculate origin prev_id m_root bits (nonce + 1)

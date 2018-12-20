@@ -9,7 +9,7 @@ import Persistence
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 hiding (find)
 import Control.Concurrent
-import Prelude hiding (append, length, init, replicate, take)
+import Prelude hiding (append, length, init, replicate, take, concat)
 
 import Crypto
 import Transaction
@@ -51,31 +51,32 @@ data BlockHeader = BlockHeader {
     - Merkle root hash,
     - number of transactions.-}
 hash_id :: BlockHeader -> [ByteString] -> ByteString
-hash_id header txs = showBS . hash $ append (showBS $ length blob) blob
-    where blob = append (showBS header) $ append (merkle_root txs) (showBS $ size txs)
+hash_id header txs = showBS . Crypto.hash $ append (showBS $ length blob) blob
+    where blob = concat [showBS header, merkle_root txs, showBS $ size txs]
+
+hash :: Block -> Digest SHA256
+hash Block{..} = Crypto.hash $ concat [prevId blockHeader,
+                                showBS $ timestamp blockHeader,
+                                merkleRoot blockHeader,
+                                origin,
+                                showBS $ nonce blockHeader]
 
 
 -- | Chain of Blocks / List of Block_Hash
 type Blockchain = [ByteString]
 
-genesis_header = BlockHeader "genesis" 1538583356613 "no-merkle-root" 4 0
-genesis_block  = Block genesis_header "f1rstM1n3r" 0 []
-
 -- | Validate a Block
 is_valid_block :: Block -> Block -> Bool
-is_valid_block Block{..} (Block h o n txs)
+is_valid_block blk@Block{..} (Block h o n txs)
     | (prevId blockHeader) /= Block.hash_id h txs = False
     | (take (bits blockHeader) hashed) /= replicate (bits blockHeader) '0' = False
     -- | -- validate transactions here
     | otherwise = True
-    where hashed = showBS . hash . append (prevId blockHeader) 
-                 . append (showBS $ timestamp blockHeader) 
-                 . append (merkleRoot blockHeader)
-                 $ append origin (showBS $ nonce blockHeader)
+    where hashed = showBS $ Block.hash blk
 
 -- | Recursive validate a chain of blocks
 is_valid_chain :: [Block] -> Bool
-is_valid_chain (b:[]) = True -- to be revise
+is_valid_chain (b:[]) = True -- the last block, to be revise
 is_valid_chain (b:b1:bs)
     | (is_valid_block b b1) /= True = False
     | otherwise = is_valid_chain (b1:bs)
@@ -83,14 +84,7 @@ is_valid_chain (b:b1:bs)
 
 -- | Verify and update block to latest chain
 -- replace_chain :: Blockchain -> Blockchain -> IO Blockchain
--- accept_block blk = do
---     last_hash <- last_block_id
-    
 
-init_genesis = do
-    reset_lmdb
-    db <- start_lmdb
-    push_single db (append "block#" $ Block.hash_id genesis_header [], showBS genesis_block)
 
 -- -----------------------------------------------------------------------------
 -- | Persistence

@@ -23,7 +23,7 @@ import Control.Concurrent
 -- | Lambda Database: a usecase of lmdb
 -- -----------------------------------------------------------------------------
 
--- Remove MDB_WRITEMAP, coz it enlarges db to 4gb on OSX
+-- Remove MDB_WRITEMAP, coz it enlarges db to 4gb on Mac OS
 lmdbEnvF :: [MDB_EnvFlag]
 lmdbEnvF = [MDB_NOLOCK]
 
@@ -37,7 +37,7 @@ type Commit = M.HashMap ByteString ByteString
 
 writeflags = compileWriteFlags []
 
--- Init lmdb env
+-- | Init lmdb env
 initEnv fp = do
     FS.createDirectoryIfMissing False fp
     env <- mdb_env_create
@@ -48,7 +48,7 @@ initEnv fp = do
     -- mdb_env_info env >>= print
     return env
 
--- Open or Create db
+-- | Open or Create db
 -- Initiate sample data and seq infos
 initDb fp = do
     env <- initEnv fp
@@ -57,10 +57,9 @@ initDb fp = do
     ref_dbi  <- mdb_dbi_open' txn (Just "#") [MDB_CREATE]
     put txn ref_dbi ("block", "0")
     put txn ref_dbi ("tx#", "0")
-    put txn ref_dbi ("block#1", "block#c8925588637c65e719681d1275d8d87c2b305744992e1e7ff6597bb5f918e9e6")
     mdb_txn_commit txn
 
--- Truncate a Database
+-- | Truncate a Database
 clearDb db = do
     env <- initEnv "data.mdb"
     txn <- mdb_txn_begin env Nothing False
@@ -92,6 +91,7 @@ open_lmdb db = do
     dbi <- mdb_dbi_open' txn (Just db) []
     return (txn, dbi)
 
+-- | Clean then re-init all databases
 reset_lmdb = do
     clearDb "@"
     clearDb "#"
@@ -217,17 +217,17 @@ dbSignal :: Lambdadb -> IO ()
 dbSignal db = tryPutMVar (db_signal db) () >> return () --A non-blocking version of putMVar
 
 lambdaWriter db = do
-    -- Get write signal
-    -- About takeMVar:
-    -- If the MVar is currently empty, takeMVar will wait until it is full.
-    -- After a takeMVar, the MVar is left empty.
+    -- |  Get write signal
+    {-  About takeMVar:
+        If the MVar is currently empty, takeMVar will wait until it is full.
+        After a takeMVar, the MVar is left empty.-}
     takeMVar (db_signal db) 
 
-    -- Take out commits (as write set) and put an empty set to db_commit MVar
-    -- About swapMVar:
-    -- Take a value from an MVar, put a new value into the MVar and return the value taken
-    -- This function is atomic only if there are no other producers for this MVar.
-    cm <- swapMVar (db_commit db) (M.empty) --pop commits out
+    -- | Take out commits (as write set) and put an empty set to db_commit MVar
+    {-  About swapMVar:
+        Take a value from an MVar, put a new value into the MVar and return the value taken
+        This function is atomic only if there are no other producers for this MVar.-}
+    cm <- swapMVar (db_commit db) (M.empty) -- pop commits out
     txn <- mdb_txn_begin (db_env db) Nothing False
     data_dbi <- mdb_dbi_open' txn (Just "@") []
     ref_dbi  <- mdb_dbi_open' txn (Just "#") []
@@ -243,6 +243,6 @@ lambdaWriter db = do
                 update txn data_dbi (k, v)
     -- commit
     mdb_txn_commit txn
-    -- Thread Delay - Optional
+    -- Thread Delay (optional)
     -- threadDelay 480000
     lambdaWriter db
