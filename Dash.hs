@@ -12,6 +12,9 @@ import Control.Monad
 import Control.Monad.IO.Class
 import System.Console.Haskeline
 import System.Environment
+import Network.Wai
+import Network.HTTP.Types
+import Network.Wai.Handler.Warp (run)
 
 import Network.Connection
 import Network.Node
@@ -21,6 +24,7 @@ import Block
 
 -- -----------------------------------------------------------------------------
 -- Dash is a Command Line Interface that helps interact with Lambda-Chain
+-- -----------------------------------------------------------------------------
 
 -- | Define Type of Commands
 data Cmd = Conn String String
@@ -85,3 +89,28 @@ loopCmd st = do
             socks <- tryReadMVar (_peers st)
             sendNetwork (fromJust socks) (C.pack m)    
     loopCmd st
+
+-- -----------------------------------------------------------------------------
+-- Http Server
+-- -----------------------------------------------------------------------------
+
+app :: Application
+app _ respond = do
+-- app _ respond = respond index
+    putStrLn "I've done some IO here"
+    respond $ responseLBS
+        status200
+        [("Content-Type", "text/plain")]
+        "Hi, this is a sample message from Lambda Http Server!"
+
+index :: Response
+index = responseFile
+    status200
+    [("Content-Type", "text/html")]
+    "index.html"
+    Nothing
+
+main :: IO ()
+main = do
+    putStrLn $ "http://localhost:8080/"
+    run 8080 app

@@ -32,8 +32,11 @@ Via Package Manager on Unix system (brew, yum, apt...)
 2. hashmap and system path
 > $ cabal install unordered-containers easy-file
 
-3. database and network
-> $ cabal install lmdb network
+3. database
+> $ cabal install lmdb
+
+4. and network
+> $ cabal install network wai warp
 
 ## Running Node
 
@@ -42,4 +45,8 @@ Via Package Manager on Unix system (brew, yum, apt...)
 3. connect [host] [port]
 4. transfer [address] [amount]
 5. mine
+
+## Running HTTP Server
+
+Under Construction
 
