@@ -3,6 +3,7 @@
 module Network.Connection (
     Socket,
     SockAddr,
+    Peer(..),
     sendAll,
     recv,
     close,
@@ -21,6 +22,11 @@ import Data.ByteString.Char8 (append, pack)
 import Control.Concurrent
 import Control.Monad (forM_)
 
+
+data Peer = Peer {
+    source :: Socket,
+    pstate :: Int
+} deriving (Eq, Show)
 
 -- | Connect with default settings of Network.Socket
 connect_ :: (HostName, ServiceName) -> IO Socket
@@ -46,14 +52,16 @@ listenOn p2p_port = do
     return sock
 
 -- | Listen n Accept incoming connections
-listen_ :: Socket -> MVar [Socket] -> IO ()
-listen_ sock socks = do
+listen_ :: Socket -> MVar [Peer] -> IO ()
+listen_ sock peers = do
     conn   <- accept sock
     print  $ "A new connection is established. Sock_addr: " ++ (show $ snd conn)
-    -- send welcome msg, then modify list of peers (MVar peers)
-    sendAll (fst conn) $ append "You are connected to: " (pack $ show sock)
-    modifyMVarMasked_ socks $ \lst -> return $ (fst conn):lst
-    listen_ sock socks
+    -- send chain query msg, then modify list of peers (MVar peers)
+    sendAll (fst conn) "chain?"
+    state <- recv (fst conn) 1024
+    let newPeer = Peer (fst conn) state
+    modifyMVarMasked_ peers $ \lst -> return $ newPeer:lst
+    listen_ sock peers
 
 -- | Send a message on specified socket, then try receive 1024 bytes of response
 sendReq :: Socket -> ByteString -> IO ()
@@ -66,6 +74,6 @@ sendReq sock msg = do
     print res
 
 -- | Send a message to whole network (peers)    
-sendNetwork :: [Socket] -> ByteString -> IO ()
-sendNetwork socks msg = do
-    forM_ socks $ \sock -> sendAll sock msg       
+sendNetwork :: [Peer] -> ByteString -> IO ()
+sendNetwork peers msg = do
+    forM_ peers $ \peer -> sendAll (source peer) msg       

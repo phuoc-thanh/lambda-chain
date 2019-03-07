@@ -63,7 +63,7 @@ loopCmd st = do
     case toCmd minput of
         Conn h p -> liftIO $ do
             sock <- connect_ (h, p)
-            modifyMVarMasked_ (_peers st) $ \lst -> return $ sock:lst
+            modifyMVarMasked_ (_peers st) $ \lst -> return $ Peer sock 0:lst
         Peers    -> liftIO $ tryReadMVar (_peers st) >>= print
         Tx_Pool  -> liftIO $ tryReadMVar (_pool st)  >>= print
         Txn a m  -> liftIO $ do
@@ -84,7 +84,7 @@ loopCmd st = do
         Block_ i -> liftIO $ do
             block <- find_by_index $ C.append "block#" (showBS i)
             print block
-        BlockHeight -> liftIO $ block_height >>= print
+        BlockHeight -> liftIO $ (blocks $ _db st) >>= print
         Raw m    -> liftIO $ do
             socks <- tryReadMVar (_peers st)
             sendNetwork (fromJust socks) (C.pack m)    

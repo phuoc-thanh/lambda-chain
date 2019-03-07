@@ -90,12 +90,24 @@ is_valid_chain (b:b1:bs)
 -- | Persistence
 -- -----------------------------------------------------------------------------
 
-{- On "#" dabatase, lmdb writes pair of (block_height, block_id)
-    block_height is also considered as index of block
-    that presents how old a block.
+{- On "#" dabatase, lmdb stores pair of (block_height, block_id)
+    ---------------------------------
+    |       key      |     value    |
+    ---------------------------------
+    |    block#0     |  block#c892  |
+    |    block#1     |  block#d189  |
+    |       ...      |     ...      |
 
- - On "@" database, lmdb writes pair of (block_id, block)
-    This is the data inside of a block -}
+
+ - On "@" database, lmdb stores pair of (block_id, block_data)
+    ---------------------------------
+    |       key      |     value    |
+    ---------------------------------
+    |   block#c892   |  block_data  |
+    |   block#d189   |  block_data  |
+    |       ...      |      ...     |
+
+    -}
 
 find_by_id block_id = find' "@" block_id
 
@@ -103,12 +115,9 @@ find_by_index block_height = do
     block_id <- find' "#" block_height
     find' "@" block_id
 
--- | Quick query block height
-block_height = find' "#" "block"
-
 -- | Quick query last block id
 last_block_id = do
-    h <- block_height
+    h <- find' "#" "blocks"
     find' "#" (append "block#" h)
 
 -- | Quick query last block

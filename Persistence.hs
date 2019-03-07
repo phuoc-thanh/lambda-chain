@@ -108,17 +108,19 @@ find' db key = do
     val        <- withBS_as_val key $ get txn dbi
     mdb_txn_commit txn
     case val of
-        Nothing -> return "Nothing in lambda-db"
+        Nothing -> return "lambdadb: Nothing!"
         Just v  -> return v
 
 -- | Find value in specified db
-find :: Lambdadb -> String -> ByteString -> IO (Maybe ByteString)
+find :: Lambdadb -> String -> ByteString -> IO ByteString
 find db t k = do -- t: db name, # or @
     txn <- mdb_txn_begin (db_env db) Nothing True
     dbi <- mdb_dbi_open' txn (Just t) []
-    v <- withBS_as_val k $ get txn dbi
+    val <- withBS_as_val k $ get txn dbi
     mdb_txn_commit txn
-    return v
+    case val of
+        Nothing -> return "lambdadb: Nothing!"
+        Just v  -> return v
 
 -- | Try N times to find a value
 try 0 f = return "Nothing"

@@ -7,8 +7,9 @@ import Network.Socket.ByteString (send, recv, sendAll)
 import Control.Concurrent
 import Control.Monad (forM_, unless)
 import Data.ByteString (ByteString)
-import Data.ByteString.Char8
+import Data.ByteString.Char8 hiding (find)
 import Data.Maybe
+import Data.List (delete)
 import Prelude hiding (takeWhile, dropWhile, take, tail, null, length, replicate, concat)
 
 import Address
@@ -26,9 +27,9 @@ data NodeInfo = NodeInfo {
 } deriving (Show, Read, Eq)
 
 data NodeState = NodeState {
-    _db        :: Lambdadb,
-    _pool      :: MVar [Transaction],
-    _peers     :: MVar [Socket]
+    _db    :: Lambdadb,
+    _pool  :: MVar [Transaction],
+    _peers :: MVar [Peer]
 }
 
 -- | Initiate a new Node Environment, for the first time Node is live
@@ -44,6 +45,7 @@ init_node = do
     put txn ref ("node_addr", showBS addr)
     put txn ref ("node_keys", showBS $ keyPair addr)
     put txn ref ("balance"  , "50")
+    put txn ref ("blocks"   , "0" )
     put txn ref ("block#1"  , "block#c8925588637c65e719681d1275d8d87c2b305744992e1e7ff6597bb5f918e9e6")
     commit_txn txn
     (txn2, db) <- open_lmdb "@"
@@ -53,9 +55,6 @@ init_node = do
     where
         genesis_block  = Block genesis_header "f1rstM1n3r" 0 []
         genesis_header = BlockHeader "genesis" 1538583356613 "no-merkle-root" 4 0
-
--- | Return the hex-version PublicKey of Node    
-getPublicAddress = find' "#" "hex_addr"    
 
 send_to :: ByteString -> Int -> IO (Maybe Transaction)
 send_to recvAddr amount = do
@@ -107,8 +106,7 @@ adjust_diff = do
 sync_chain :: NodeState -> IO ()
 sync_chain st = do
     peers <- tryReadMVar (_peers st)
-    let socks = fromJust peers
-    sendNetwork socks "blocks?"
+    sendNetwork (fromJust peers) "chain?"
     -- res <- recv
 
 
@@ -132,24 +130,50 @@ go_live p2p_port = do
 conn_handle :: NodeState -> IO ()
 conn_handle st = do
     threadDelay 2000000
-    conn <- tryReadMVar (_peers st)
-    forM_ (fromJust conn) $ \s -> req_handle s st
+    peers <- tryReadMVar (_peers st)
+    forM_ (fromJust peers) $ \peer -> req_handle peer st
     conn_handle st
 
 -- | Handle incoming requests    
-req_handle :: Socket -> NodeState -> IO ()    
-req_handle sock st = do
+req_handle :: Peer -> NodeState -> IO ()    
+req_handle peer st = do
+    let sock = source peer
     raw <- recv sock 1024
     unless (null raw) $ do
-        case (rawToMsg raw) of          
+        case (rawToMsg raw) of     
             TxnReq txn -> modifyMVarMasked_ (_pool st) $ \txns -> return $ expand_pool txn txns
-            BlockReq b -> do
+            BlockInfo b -> do
                 -- TODO: verify block and clear pool
-                print "received a block request, adding to db.."
+                print "received a promoted block, verifying and saving.."
                 save_block b (_db st)
                 print "Done"
-            ChainInfo  -> do
-                print "received a block query.."
-                blocks <- block_height
-                sendAll sock blocks
+            ChainReq  -> do
+                print "received a ledger's state request, selecting from db.."
+                height <- blocks (_db st)
+                sendAll sock $ append "chain:" height
+            ChainInfo h -> do
+                print "received a ledger info from peer, adding to node state.."
+                modifyMVarMasked_ (_peers st) $ \ps -> return $ Peer sock h : (delete peer ps)
             Raw m      -> print m
+
+-- -----------------------------------------------------------------------------
+-- | Persistence
+-- -----------------------------------------------------------------------------
+
+{- On "#" database, lmdb stores information of the running node
+    ---------------------------------------
+    |     key     |         value         |
+    ---------------------------------------
+    |  hex_addr   |  hex_address_of_node  |
+    |  node_addr  |  address_of_node      |
+    |  node_keys  |  key_pairs_of_node    |
+    |  balance    |  balance_of_node      |
+    |  blocks     |  block_height         |
+
+--}
+
+-- | Return the block height of current chain
+blocks db = find db "#" "blocks"
+
+-- | Return the hex-version PublicKey of Node    
+getPublicAddress = find' "#" "hex_addr"    
