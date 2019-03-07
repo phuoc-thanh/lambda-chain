@@ -77,8 +77,8 @@ loopCmd st = do
         Mine     -> liftIO $ do
             txs <- tryReadMVar (_pool st)
             block <- mine_block $ fromJust txs
-            print "A new block was mined, sending to network.."
-            print block
+            print "A new block was mined, saving & sending to network.."
+            Block.save block (_db st)
             socks <- tryReadMVar (_peers st)
             sendNetwork (fromJust socks) (C.append "block:" (showBS block))
         Block_ i -> liftIO $ do

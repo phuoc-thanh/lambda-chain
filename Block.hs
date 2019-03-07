@@ -131,9 +131,7 @@ last_block = do
 prev_block blk = find' "@" (prevId $ blockHeader blk)
 
 -- | Save a block to db
-save_block blk db = do
-    let block_k = append "block#" $ Block.hash_id header txs
+save blk@Block{..} db = do
+    let block_k  = append "block#" $ Block.hash_id blockHeader txHashes
     let block_v  = showBS blk
     push_single db (block_k, block_v)
-    where header = blockHeader blk
-          txs    = txHashes    blk

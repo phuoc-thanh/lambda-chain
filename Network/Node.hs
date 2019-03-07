@@ -45,14 +45,15 @@ init_node = do
     put txn ref ("node_addr", showBS addr)
     put txn ref ("node_keys", showBS $ keyPair addr)
     put txn ref ("balance"  , "50")
-    put txn ref ("blocks"   , "0" )
-    put txn ref ("block#1"  , "block#c8925588637c65e719681d1275d8d87c2b305744992e1e7ff6597bb5f918e9e6")
+    put txn ref ("blocks"   , "1" )
+    put txn ref ("block#1"  , append "block#" hashid)
     commit_txn txn
     (txn2, db) <- open_lmdb "@"
-    put txn2 db (append "block#" $ Block.hash_id genesis_header [], showBS genesis_block)
+    put txn2 db (append "block#" hashid, showBS genesis_block)
     commit_txn txn2
     print $ append "Node is registered, node_addr: " (hexAddr addr)
     where
+        hashid         = Block.hash_id genesis_header []
         genesis_block  = Block genesis_header "f1rstM1n3r" 0 []
         genesis_header = BlockHeader "genesis" 1538583356613 "no-merkle-root" 4 0
 
@@ -145,7 +146,7 @@ req_handle peer st = do
             BlockInfo b -> do
                 -- TODO: verify block and clear pool
                 print "received a promoted block, verifying and saving.."
-                save_block b (_db st)
+                Block.save b (_db st)
                 print "Done"
             ChainReq  -> do
                 print "received a ledger's state request, selecting from db.."

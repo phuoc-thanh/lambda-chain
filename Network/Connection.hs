@@ -57,10 +57,8 @@ listen_ sock peers = do
     conn   <- accept sock
     print  $ "A new connection is established. Sock_addr: " ++ (show $ snd conn)
     -- send chain query msg, then modify list of peers (MVar peers)
-    sendAll (fst conn) "chain?"
-    state <- recv (fst conn) 1024
-    let newPeer = Peer (fst conn) state
-    modifyMVarMasked_ peers $ \lst -> return $ newPeer:lst
+    sendAll (fst conn) "welcome"
+    modifyMVarMasked_ peers $ \lst -> return $ Peer (fst conn) 0 :lst
     listen_ sock peers
 
 -- | Send a message on specified socket, then try receive 1024 bytes of response

@@ -145,22 +145,27 @@ push_commit db cm = do
 -- | Transaction Commands
 -- -----------------------------------------------------------------------------
 
--- get the last key in sequence   
+-- | Get the sequence value of keys
 get_ref txn dbi k = do
-    val <- withBS_as_val (key_prefix k) $ get txn dbi
+    let keys = C.append (key_prefix k) "s"
+    val  <- withBS_as_val keys $ get txn dbi
     case val of
         Nothing -> do
             print "LMDB: Can't find the sequence reference"
             return "00"
         Just v  -> return v
 
--- Increment the sequence and put a 
+-- | Increment the sequence value of keys, and put an index record in ref dbi
 put_ref txn dbi k = do
-    key_seq  <- get_ref txn dbi k
-    let current_seq =  read (C.unpack key_seq) :: Int
-    let new_seq     = C.pack $ show $ current_seq + 1
-    update txn dbi (key_prefix k, new_seq)
-    return $ C.append (key_prefix k) $ C.append "#" new_seq
+    seq_val <- get_ref txn dbi k
+    -- Update current sequence by adding 1 unit
+    let curr_seq = read (C.unpack seq_val) :: Int
+    let new_seq  = C.pack $ show $ curr_seq + 1
+    let seq_key  = C.append (key_prefix k) "s"
+    update txn dbi (seq_key, new_seq)
+    -- Put an index record to ref_dbi
+    let key_ref = C.append (key_prefix k) $ C.append "#" new_seq
+    put txn dbi (key_ref, k)
 
 get :: MDB_txn -> MDB_dbi' -> MDB_val -> IO (Maybe ByteString)
 get txn dbi k = do
@@ -237,9 +242,8 @@ lambdaWriter db = do
         look_ <- withBS_as_val k $ get txn data_dbi
         case look_ of
             Nothing -> do  -- case: write new
-                ref <- put_ref txn ref_dbi k       -- increment seq
-                put txn ref_dbi (ref, k)           -- put ref key
-                put txn data_dbi (k, v)            -- put data
+                ref <- put_ref txn ref_dbi k       -- increment seq then put ref_key to ref_dbi
+                put txn data_dbi (k, v)            -- put data to data_dbi
             Just val -> do -- case: override
                 print "key found, replace old value"
                 update txn data_dbi (k, v)
