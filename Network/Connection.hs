@@ -3,13 +3,12 @@
 module Network.Connection (
     Socket,
     SockAddr,
-    Peer(..),
+    Node(..),
     sendAll,
     recv,
     close,
     accept,
     listenOn,
-    listen_,
     connect_,
     sendReq,
     sendNetwork
@@ -23,55 +22,58 @@ import Control.Concurrent
 import Control.Monad (forM_)
 
 
-data Peer = Peer {
-    source :: Socket,
-    pstate :: Int
-} deriving (Eq, Show)
+data Node = Node {
+    _sock :: Socket,
+    _addr :: SockAddr,
+    _noid :: ThreadId
+} deriving (Show, Eq)
 
 -- | Connect with default settings of Network.Socket
-connect_ :: (HostName, ServiceName) -> IO Socket
+connect_ :: (HostName, ServiceName) -> IO Node
 connect_ (host, port) = do 
     addrinfos <- getAddrInfo Nothing (Just host) (Just port)
     let serveraddr = head addrinfos
     sock <- socket (addrFamily serveraddr) Stream defaultProtocol
-    connect sock (addrAddress serveraddr)
+    node_id <- forkIO $ connect sock (addrAddress serveraddr)
     threadDelay 1024
     msg <- recv sock 256 -- receive welcome msg
     print msg
-    return sock
+    return $ Node sock (addrAddress serveraddr) node_id
 
 -- | Listen on a bound socket
-listenOn :: PortNumber -> IO Socket
-listenOn p2p_port = do
+listenOn :: PortNumber -> MVar [Node] -> IO ()
+listenOn p2p_port peers = do
     sock <- socket AF_INET Stream 0                -- create socket
     setSocketOption sock ReuseAddr 1               -- make socket immediately reusable - eases debugging.
     bind sock (SockAddrInet p2p_port iNADDR_ANY)   -- listen on TCP p2p_port as config.
-    listen sock 32                                 -- set a max of 32 queued connections
+    listen sock 8                                  -- set a max of 8 queued connections
     print $ "Lambda-client is now listening on port: " ++ (show p2p_port)
     threadDelay 4096
-    return sock
+    listen_ sock peers                             -- Accept incoming connections
 
 -- | Listen n Accept incoming connections
-listen_ :: Socket -> MVar [Peer] -> IO ()
+listen_ :: Socket -> MVar [Node] -> IO ()
 listen_ sock peers = do
-    conn   <- accept sock
-    print  $ "A new connection is established. Sock_addr: " ++ (show $ snd conn)
-    -- send chain query msg, then modify list of peers (MVar peers)
-    sendAll (fst conn) "welcome"
-    modifyMVarMasked_ peers $ \lst -> return $ Peer (fst conn) 0 :lst
+    (peer_sock, peer_addr) <- accept sock
+    print $ "A new connection is established. Sock_addr: " ++ (show peer_addr)
+    -- send welcome msg, then modify list of peers (MVar [Node])
+    node_id <- forkIO $ sendAll peer_sock "welcome"
+    modifyMVarMasked_ peers $ \lst -> return $ Node peer_sock peer_addr node_id : lst
+    -- handle threads
     listen_ sock peers
 
 -- | Send a message on specified socket, then try receive 1024 bytes of response
-sendReq :: Socket -> ByteString -> IO ()
-sendReq sock msg = do
-    -- this is because of windows 7 ghci put "\r" character to end the string
+sendReq :: Node -> ByteString -> IO ()
+sendReq node msg = do
+    -- Caution: In some cases of windows 7, ghci put "\r" character to end the string
     -- let msg = C.init raw
     sendAll sock msg
     threadDelay 2048
     res <- recv sock 1024
     print res
+        where sock = _sock node
 
 -- | Send a message to whole network (peers)    
-sendNetwork :: [Peer] -> ByteString -> IO ()
-sendNetwork peers msg = do
-    forM_ peers $ \peer -> sendAll (source peer) msg       
+sendNetwork :: [Node] -> ByteString -> IO ()
+sendNetwork nodes msg = do
+    forM_ nodes $ \n -> sendAll (_sock n) msg       

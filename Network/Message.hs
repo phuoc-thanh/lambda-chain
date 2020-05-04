@@ -13,14 +13,13 @@ import Transaction
 -- Raw:  Nothing special, just text.
 -- Req:  Request for a block, a transaction or the ledger.
 -- Info: Promote a block info, transaction info... expecting to receive a response.
-data Msg = Raw ByteString | BlockReq Int | BlockInfo Block | TxnReq Transaction | ChainReq | ChainInfo Int
+data Msg = Raw ByteString | BlockReq Int | BlockInfo Block | BlocksInfo [Block] | TxnReq Transaction
 
 rawToMsg :: ByteString -> Msg
 rawToMsg m = case (takeWhile (/=':') m) of
-    "chain?"  -> ChainReq
-    "block?"  -> BlockReq  (read data_ :: Int)
-    "chain"   -> ChainInfo (read data_ :: Int)
-    "block"   -> BlockInfo (read data_ :: Block)
-    "txn"     -> TxnReq    (read data_ :: Transaction)
+    "block?"  -> BlockReq   (read data_ :: Int)
+    "blocks"  -> BlocksInfo (read data_ :: [Block])
+    "block"   -> BlockInfo  (read data_ :: Block)
+    "txn"     -> TxnReq     (read data_ :: Transaction)
     msg       -> Raw msg
     where data_ = unpack . tail $ dropWhile (/=':') m

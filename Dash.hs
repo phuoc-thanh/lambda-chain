@@ -19,7 +19,7 @@ import Network.Wai.Handler.Warp (run)
 import Network.Connection
 import Network.Node
 import Transaction
-import Block
+import Block hiding (last)
 
 
 -- -----------------------------------------------------------------------------
@@ -63,7 +63,7 @@ loopCmd st = do
     case toCmd minput of
         Conn h p -> liftIO $ do
             sock <- connect_ (h, p)
-            modifyMVarMasked_ (_peers st) $ \lst -> return $ Peer sock 0:lst
+            modifyMVarMasked_ (_peers st) $ \lst -> return $ sock:lst
         Peers    -> liftIO $ tryReadMVar (_peers st) >>= print
         Tx_Pool  -> liftIO $ tryReadMVar (_pool st)  >>= print
         Txn a m  -> liftIO $ do
@@ -74,7 +74,7 @@ loopCmd st = do
                 Just tx -> do
                     modifyMVarMasked_ (_pool st) $ \txs -> return $ expand_pool tx txs
                     sendNetwork (fromJust socks) (C.append "txn:" (showBS tx))
-        Mine     -> liftIO $ do
+        Mine    -> liftIO $ do
             txs <- tryReadMVar (_pool st)
             block <- mine_block $ fromJust txs
             print "A new block was mined, saving & sending to network.."
@@ -82,7 +82,7 @@ loopCmd st = do
             socks <- tryReadMVar (_peers st)
             sendNetwork (fromJust socks) (C.append "block:" (showBS block))
         Block_ i -> liftIO $ do
-            block <- find_by_index $ C.append "block#" (showBS i)
+            block <- find_by_id $ C.append "block#" (showBS i)
             print block
         BlockHeight -> liftIO $ (blocks $ _db st) >>= print
         Raw m    -> liftIO $ do

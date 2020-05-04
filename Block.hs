@@ -9,6 +9,7 @@ import Persistence
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 hiding (find)
 import Control.Concurrent
+import Control.Monad (forM_, mapM_)
 import Prelude hiding (append, length, init, replicate, take, concat)
 
 import Crypto
@@ -65,12 +66,12 @@ hash Block{..} = Crypto.hash $ concat [prevId blockHeader,
 -- | Chain of Blocks / List of Block_Hash
 type Blockchain = [ByteString]
 
--- | Validate a Block
-is_valid_block :: Block -> Block -> Bool
-is_valid_block blk@Block{..} (Block h o n txs)
+-- | Validate a Block: this_block -> previous_block -> True/False
+is_valid :: Block -> Block -> Bool
+is_valid blk@Block{..} (Block h o n txs)
     | (prevId blockHeader) /= Block.hash_id h txs = False
     | (take (bits blockHeader) hashed) /= replicate (bits blockHeader) '0' = False
-    -- | -- validate transactions here
+    -- validate transactions here
     | otherwise = True
     where hashed = showBS $ Block.hash blk
 
@@ -78,7 +79,7 @@ is_valid_block blk@Block{..} (Block h o n txs)
 is_valid_chain :: [Block] -> Bool
 is_valid_chain (b:[]) = True -- the last block, to be revise
 is_valid_chain (b:b1:bs)
-    | (is_valid_block b b1) /= True = False
+    | (is_valid b b1) /= True = False
     | otherwise = is_valid_chain (b1:bs)
 
 
@@ -111,8 +112,9 @@ is_valid_chain (b:b1:bs)
 
 find_by_id block_id = find' "@" block_id
 
-find_by_index block_height = do
-    block_id <- find' "#" block_height
+-- | Find a block by index / height
+find_by_idx idx db = do
+    block_id <- find db "#" idx
     find' "@" block_id
 
 -- | Quick query last block id
@@ -128,10 +130,26 @@ last_block = do
     let block = readBS $ val :: Block
     return block
 
-prev_block blk = find' "@" (prevId $ blockHeader blk)
+-- | Return last block with ldb env
+last db = do
+    height   <- find db "#" "blocks"
+    block_id <- find db "#" $ append "block#" height
+    val <- find db "@" block_id
+    let last_block = readBS $ val :: Block
+    return last_block
+
+-- | Return previous block
+prev blk = find' "@" (prevId $ blockHeader blk)
 
 -- | Save a block to db
+save :: Block -> Lambdadb -> IO ()
 save blk@Block{..} db = do
     let block_k  = append "block#" $ Block.hash_id blockHeader txHashes
     let block_v  = showBS blk
     push_single db (block_k, block_v)
+
+-- | Save multiple blocks at once
+-- I don't use push_commit due to it's type, hashmap is unordered
+-- The ledger must be consistency, each block always have it's height
+saveM :: [Block] -> Lambdadb -> IO ()
+saveM bs db = mapM_ (\b -> save b db) bs

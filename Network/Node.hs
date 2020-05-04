@@ -9,7 +9,6 @@ import Control.Monad (forM_, unless)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 hiding (find)
 import Data.Maybe
-import Data.List (delete)
 import Prelude hiding (takeWhile, dropWhile, take, tail, null, length, replicate, concat)
 
 import Address
@@ -20,16 +19,11 @@ import Persistence
 import Network.Connection
 import Network.Message
 
-data NodeInfo = NodeInfo {
-    _host :: HostName,
-    _port :: ServiceName,
-    _addr :: Address
-} deriving (Show, Read, Eq)
 
 data NodeState = NodeState {
-    _db    :: Lambdadb,
-    _pool  :: MVar [Transaction],
-    _peers :: MVar [Peer]
+    _db     :: Lambdadb,
+    _pool   :: MVar [Transaction],
+    _peers  :: MVar [Node]
 }
 
 -- | Initiate a new Node Environment, for the first time Node is live
@@ -96,34 +90,43 @@ adjust_diff = do
     time <- now
     if t + mine_rate > time then return $ b - 1 else return $ b + 1
 
--- Synchronize local ledger with the world state ledger
--- 1. First, request block_height number from connected peers
--- 2. Check height, select the highesh one (longest ledger), says, from Node X
--- 3. Send a get request to Node X with current local block_height
--- 4. Receive [Block] from Node X that contains array of missing blocks
--- 5. Verify recursively from latest block to current local block height
--- 6. If Verified, update, or re select ledger.
--- Consider the re-select process, and the synchronize time, if larger than mine_rate, the process need to reroll
+-- | Synchronize local ledger with the world state ledger
+
+{- Detail steps of synchronize process:
+1. First, request the "next_block" from connected peers
+2. If nothing returned from result, then the node already has longest version of ledger
+3. Else update the ledger with new block received, it may send up-to 4 blocks/response
+4. Continue that process until get nothing in result -}
+
 sync_chain :: NodeState -> IO ()
 sync_chain st = do
     peers <- tryReadMVar (_peers st)
-    sendNetwork (fromJust peers) "chain?"
-    -- res <- recv
+    -- Request a next block base on current ledger (block height)
+    height <- blocks (_db st)
+    sendNetwork (fromJust peers) $ append "block?:" height
+    -- let pc = peer_select $ fromJust peers
+    print "txt"
 
+
+update :: [Block] -> NodeState -> IO ()
+update bs st = do
+    case is_valid_chain bs of
+        False -> print "invalid chain"
+        True  -> Block.saveM bs (_db st)
+        
 
 -- | Go live a node, with empty chain, peers and txn_pool
 go_live p2p_port = do
     lambdaDb   <- start_lmdb
-    sock       <- listenOn p2p_port
     txn_pool   <- newMVar mempty
     peers      <- newMVar mempty
     -- Initiate Node State
-    let state  = NodeState {
-        _db    = lambdaDb,
-        _pool  = txn_pool,
-        _peers = peers
+    let state   = NodeState {
+        _db     = lambdaDb,
+        _pool   = txn_pool,
+        _peers  = peers
     }
-    forkIO $ listen_ sock (_peers state)
+    forkIO $ listenOn p2p_port (_peers state)
     forkIO $ conn_handle state
     return state
 
@@ -136,25 +139,23 @@ conn_handle st = do
     conn_handle st
 
 -- | Handle incoming requests    
-req_handle :: Peer -> NodeState -> IO ()    
+req_handle :: Node -> NodeState -> IO ()    
 req_handle peer st = do
-    let sock = source peer
+    let sock = _sock peer
     raw <- recv sock 1024
     unless (null raw) $ do
         case (rawToMsg raw) of     
             TxnReq txn -> modifyMVarMasked_ (_pool st) $ \txns -> return $ expand_pool txn txns
             BlockInfo b -> do
-                -- TODO: verify block and clear pool
-                print "received a promoted block, verifying and saving.."
-                Block.save b (_db st)
-                print "Done"
-            ChainReq  -> do
+                print "received a new block, verifying.."
+                p <- Block.last (_db st)
+                case Block.is_valid b p of
+                    False -> print "invalid block!"
+                    True  -> Block.save b (_db st)
+            BlockReq l -> do
                 print "received a ledger's state request, selecting from db.."
                 height <- blocks (_db st)
                 sendAll sock $ append "chain:" height
-            ChainInfo h -> do
-                print "received a ledger info from peer, adding to node state.."
-                modifyMVarMasked_ (_peers st) $ \ps -> return $ Peer sock h : (delete peer ps)
             Raw m      -> print m
 
 -- -----------------------------------------------------------------------------
@@ -175,6 +176,9 @@ req_handle peer st = do
 
 -- | Return the block height of current chain
 blocks db = find db "#" "blocks"
+
+-- | Get a range of blocks, from x to y (by height)
+get_blocks x y db = mapM (\n -> Block.find_by_idx db) [x..y]
 
 -- | Return the hex-version PublicKey of Node    
 getPublicAddress = find' "#" "hex_addr"    
